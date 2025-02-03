@@ -1,11 +1,11 @@
-// demo.c
+// clang-15 -O1 -g -o vulkan_test glfw_framebuffer_vk4_gpt.c -L../glfw/build/src -lglfw3 -lvulkan -lm -I. -Wl,--gc-sections  -flto
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-// Maximum limits (adjust as needed)
+// Maximum limits
 #define MAX_SWAPCHAIN_IMAGES 16
 #define MAX_WIDTH 2048
 #define MAX_HEIGHT 2048
@@ -13,12 +13,12 @@
 #define MIN_WINDOW_WIDTH 480
 #define MIN_WINDOW_HEIGHT 360
 
-// Simple error checking macro.
+// Error-checking macro.
 #define VK_CHECK(result) do { VkResult r = (result); if (r != VK_SUCCESS) { \
     fprintf(stderr, "Vulkan error %d at %s:%d\n", r, __FILE__, __LINE__); exit(1); } } while (0)
 
 typedef struct {
-    // Vulkan instance and device objects
+    // Vulkan objects
     VkInstance instance;
     VkPhysicalDevice physicalDevice;
     VkDevice device;
@@ -26,7 +26,7 @@ typedef struct {
     uint32_t graphicsQueueFamily;
     VkSurfaceKHR surface;
     
-    // Swapchain and related arrays (fixed maximum size)
+    // Swapchain (fixed-size arrays)
     VkSwapchainKHR swapchain;
     VkImage swapchainImages[MAX_SWAPCHAIN_IMAGES];
     VkImageView swapchainImageViews[MAX_SWAPCHAIN_IMAGES];
@@ -35,13 +35,13 @@ typedef struct {
     VkFormat swapchainFormat;
     VkExtent2D swapchainExtent;
     
-    // Texture used for the framebuffer (dynamic image updated each frame)
+    // Texture (for framebuffer) and sampler
     VkImage textureImage;
     VkDeviceMemory textureMemory;
     VkImageView textureView;
     VkSampler textureSampler;
     
-    // Pipeline, render pass, descriptor, etc.
+    // Pipeline, render pass, descriptor objects
     VkRenderPass renderPass;
     VkPipelineLayout pipelineLayout;
     VkPipeline pipeline;
@@ -49,67 +49,75 @@ typedef struct {
     VkDescriptorPool descriptorPool;
     VkDescriptorSet descriptorSet;
     
-    // Command pool and a single command buffer for our copy and render commands.
+    // Command pool and command buffer (preallocated once)
     VkCommandPool commandPool;
     VkCommandBuffer commandBuffer;
     
-    // Sync objects
+    // Synchronization objects
     VkSemaphore imageAvailable;
     VkSemaphore renderFinished;
     VkFence inFlightFence;
     
-    // Persistent staging buffer (allocated once to be large enough for the maximum texture)
+    // Persistent staging buffer (preallocated once)
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingMemory;
     void* stagingMapped;
     
-    // Pixel data: allocated on the heap (size: MAX_WIDTH * MAX_HEIGHT * 4)
-    unsigned char* pixels;
-    // Current framebuffer size (always ≤ MAX_WIDTH/MAX_HEIGHT)
-    uint32_t width;
-    uint32_t height;
+    // Pixel data buffer (preallocated once)
+    unsigned char* pixels; // size: MAX_WIDTH * MAX_HEIGHT * 4
+    uint32_t width, height;
     
     // GLFW window handle
     GLFWwindow* window;
 } VulkanState;
 
-// Forward declarations
+//
+// Function prototypes
+//
 VkShaderModule createShaderModule(VkDevice device, const char* filename);
 uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties);
+void initInstanceAndDevice(VulkanState* vk);
+void querySwapchainFormat(VulkanState* vk);
+void initPipeline(VulkanState* vk);
+void initSwapchain(VulkanState* vk);
+void initStagingBuffer(VulkanState* vk);
+void initTexture(VulkanState* vk);
+void updateTexture(VulkanState* vk);
+void renderFrame(VulkanState* vk);
+void recreateSwapchain(VulkanState* vk, uint32_t newWidth, uint32_t newHeight);
+void framebuffer_size_callback(GLFWwindow* window, int width, int height);
+void initVulkanState(VulkanState* vk, GLFWwindow* window, uint32_t width, uint32_t height);
 
 //
-// 1. Instance, Device, Command Pool, and Sync Objects
+// 1. Instance, Device, Command Pool, and Sync Initialization
 //
 void initInstanceAndDevice(VulkanState* vk) {
     VkApplicationInfo appInfo = {
         .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
-        .pApplicationName = "Simple Vulkan Framebuffer",
+        .pApplicationName = "Preallocated Vulkan Framebuffer",
         .applicationVersion = VK_MAKE_VERSION(1, 0, 0),
         .pEngineName = "No Engine",
         .engineVersion = VK_MAKE_VERSION(1, 0, 0),
         .apiVersion = VK_API_VERSION_1_0,
     };
 
-    uint32_t glfwExtCount = 0;
-    const char** glfwExt = glfwGetRequiredInstanceExtensions(&glfwExtCount);
-    VkInstanceCreateInfo createInfo = {
+    uint32_t extCount = 0;
+    const char** extNames = glfwGetRequiredInstanceExtensions(&extCount);
+    VkInstanceCreateInfo instInfo = {
         .sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO,
         .pApplicationInfo = &appInfo,
-        .enabledExtensionCount = glfwExtCount,
-        .ppEnabledExtensionNames = glfwExt,
+        .enabledExtensionCount = extCount,
+        .ppEnabledExtensionNames = extNames,
     };
-    VK_CHECK(vkCreateInstance(&createInfo, NULL, &vk->instance));
-
+    VK_CHECK(vkCreateInstance(&instInfo, NULL, &vk->instance));
     VK_CHECK(glfwCreateWindowSurface(vk->instance, vk->window, NULL, &vk->surface));
 
     uint32_t deviceCount = 0;
     VK_CHECK(vkEnumeratePhysicalDevices(vk->instance, &deviceCount, NULL));
-    if (deviceCount == 0) {
-        fprintf(stderr, "Failed to find GPUs with Vulkan support\n");
-        exit(1);
-    }
+    if (deviceCount == 0) { fprintf(stderr, "No Vulkan-compatible GPU found.\n"); exit(1); }
     VkPhysicalDevice devices[deviceCount];
     VK_CHECK(vkEnumeratePhysicalDevices(vk->instance, &deviceCount, devices));
+    vk->physicalDevice = devices[0];
     for (uint32_t i = 0; i < deviceCount; i++) {
         VkPhysicalDeviceProperties props;
         vkGetPhysicalDeviceProperties(devices[i], &props);
@@ -118,58 +126,54 @@ void initInstanceAndDevice(VulkanState* vk) {
             break;
         }
     }
-    if (vk->physicalDevice == VK_NULL_HANDLE)
-        vk->physicalDevice = devices[0];
-
-    uint32_t queueFamilyCount = 0;
-    vkGetPhysicalDeviceQueueFamilyProperties(vk->physicalDevice, &queueFamilyCount, NULL);
-    VkQueueFamilyProperties queueFamilies[queueFamilyCount];
-    vkGetPhysicalDeviceQueueFamilyProperties(vk->physicalDevice, &queueFamilyCount, queueFamilies);
+    
+    uint32_t qfCount = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(vk->physicalDevice, &qfCount, NULL);
+    VkQueueFamilyProperties qFamilies[qfCount];
+    vkGetPhysicalDeviceQueueFamilyProperties(vk->physicalDevice, &qfCount, qFamilies);
     vk->graphicsQueueFamily = UINT32_MAX;
-    for (uint32_t i = 0; i < queueFamilyCount; i++) {
+    for (uint32_t i = 0; i < qfCount; i++) {
         VkBool32 presentSupport = VK_FALSE;
         vkGetPhysicalDeviceSurfaceSupportKHR(vk->physicalDevice, i, vk->surface, &presentSupport);
-        if ((queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && presentSupport) {
+        if ((qFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && presentSupport) {
             vk->graphicsQueueFamily = i;
             break;
         }
     }
-    if (vk->graphicsQueueFamily == UINT32_MAX) {
-        fprintf(stderr, "Failed to find suitable queue family\n");
-        exit(1);
-    }
-    
+    if (vk->graphicsQueueFamily == UINT32_MAX) { fprintf(stderr, "No suitable queue family found.\n"); exit(1); }
+
     float queuePriority = 1.0f;
-    VkDeviceQueueCreateInfo queueInfo = {
+    VkDeviceQueueCreateInfo qInfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
         .queueFamilyIndex = vk->graphicsQueueFamily,
         .queueCount = 1,
         .pQueuePriorities = &queuePriority,
     };
-    const char* deviceExts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-    VkDeviceCreateInfo deviceInfo = {
+    const char* devExts[] = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+    VkDeviceCreateInfo devInfo = {
         .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
         .queueCreateInfoCount = 1,
-        .pQueueCreateInfos = &queueInfo,
+        .pQueueCreateInfos = &qInfo,
         .enabledExtensionCount = 1,
-        .ppEnabledExtensionNames = deviceExts,
+        .ppEnabledExtensionNames = devExts,
     };
-    VK_CHECK(vkCreateDevice(vk->physicalDevice, &deviceInfo, NULL, &vk->device));
+    VK_CHECK(vkCreateDevice(vk->physicalDevice, &devInfo, NULL, &vk->device));
     vkGetDeviceQueue(vk->device, vk->graphicsQueueFamily, 0, &vk->graphicsQueue);
 
-    VkCommandPoolCreateInfo poolInfo = {
+    VkCommandPoolCreateInfo cpInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
         .queueFamilyIndex = vk->graphicsQueueFamily,
         .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
     };
-    VK_CHECK(vkCreateCommandPool(vk->device, &poolInfo, NULL, &vk->commandPool));
-    VkCommandBufferAllocateInfo cmdAllocInfo = {
+    VK_CHECK(vkCreateCommandPool(vk->device, &cpInfo, NULL, &vk->commandPool));
+
+    VkCommandBufferAllocateInfo cmbAlloc = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
         .commandPool = vk->commandPool,
         .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
         .commandBufferCount = 1,
     };
-    VK_CHECK(vkAllocateCommandBuffers(vk->device, &cmdAllocInfo, &vk->commandBuffer));
+    VK_CHECK(vkAllocateCommandBuffers(vk->device, &cmbAlloc, &vk->commandBuffer));
 
     VkSemaphoreCreateInfo semInfo = { .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO };
     VK_CHECK(vkCreateSemaphore(vk->device, &semInfo, NULL, &vk->imageAvailable));
@@ -182,22 +186,19 @@ void initInstanceAndDevice(VulkanState* vk) {
 }
 
 //
-// 2. Query Swapchain Format (so the render pass uses a valid format)
+// 2. Query and Preallocate Swapchain Format
 //
 void querySwapchainFormat(VulkanState* vk) {
-    uint32_t formatCount = 0;
-    vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physicalDevice, vk->surface, &formatCount, NULL);
-    if (formatCount > 0) {
-        VkSurfaceFormatKHR* formats = malloc(formatCount * sizeof(VkSurfaceFormatKHR));
-        vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physicalDevice, vk->surface, &formatCount, formats);
-        vk->swapchainFormat = formats[0].format;
-        for (uint32_t i = 0; i < formatCount; i++) {
-            if (formats[i].format == VK_FORMAT_B8G8R8A8_UNORM) {
-                vk->swapchainFormat = formats[i].format;
-                break;
-            }
+    uint32_t count = 0;
+    vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physicalDevice, vk->surface, &count, NULL);
+    VkSurfaceFormatKHR formats[count];
+    vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physicalDevice, vk->surface, &count, formats);
+    vk->swapchainFormat = formats[0].format;
+    for (uint32_t i = 0; i < count; i++) {
+        if (formats[i].format == VK_FORMAT_B8G8R8A8_UNORM) {
+            vk->swapchainFormat = formats[i].format;
+            break;
         }
-        free(formats);
     }
 }
 
@@ -205,7 +206,8 @@ void querySwapchainFormat(VulkanState* vk) {
 // 3. Pipeline, Render Pass, and Descriptor Setup
 //
 void initPipeline(VulkanState* vk) {
-    VkAttachmentDescription colorAttachment = {
+    // Render pass
+    VkAttachmentDescription attDesc = {
         .format = vk->swapchainFormat,
         .samples = VK_SAMPLE_COUNT_1_BIT,
         .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -215,36 +217,34 @@ void initPipeline(VulkanState* vk) {
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
         .finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
     };
-    VkAttachmentReference colorRef = {
-        .attachment = 0,
-        .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-    };
+    VkAttachmentReference attRef = { .attachment = 0, .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL };
     VkSubpassDescription subpass = {
         .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
         .colorAttachmentCount = 1,
-        .pColorAttachments = &colorRef,
+        .pColorAttachments = &attRef,
     };
     VkRenderPassCreateInfo rpInfo = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
         .attachmentCount = 1,
-        .pAttachments = &colorAttachment,
+        .pAttachments = &attDesc,
         .subpassCount = 1,
         .pSubpasses = &subpass,
     };
     VK_CHECK(vkCreateRenderPass(vk->device, &rpInfo, NULL, &vk->renderPass));
 
+    // Descriptor set layout for a combined image sampler.
     VkDescriptorSetLayoutBinding samplerBinding = {
         .binding = 0,
         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         .descriptorCount = 1,
         .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
     };
-    VkDescriptorSetLayoutCreateInfo dsLayoutInfo = {
+    VkDescriptorSetLayoutCreateInfo dsInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
         .bindingCount = 1,
         .pBindings = &samplerBinding,
     };
-    VK_CHECK(vkCreateDescriptorSetLayout(vk->device, &dsLayoutInfo, NULL, &vk->descriptorSetLayout));
+    VK_CHECK(vkCreateDescriptorSetLayout(vk->device, &dsInfo, NULL, &vk->descriptorSetLayout));
 
     VkPipelineLayoutCreateInfo plInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
@@ -253,87 +253,74 @@ void initPipeline(VulkanState* vk) {
     };
     VK_CHECK(vkCreatePipelineLayout(vk->device, &plInfo, NULL, &vk->pipelineLayout));
 
-    VkShaderModule vertModule = createShaderModule(vk->device, "vert.spv");
-    VkShaderModule fragModule = createShaderModule(vk->device, "frag.spv");
-    VkPipelineShaderStageCreateInfo shaderStages[2] = {
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage = VK_SHADER_STAGE_VERTEX_BIT,
-            .module = vertModule,
-            .pName = "main",
-        },
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
-            .stage = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .module = fragModule,
-            .pName = "main",
-        }
+    // Load shader modules (one-time allocation during init)
+    VkShaderModule vertMod = createShaderModule(vk->device, "vert.spv");
+    VkShaderModule fragMod = createShaderModule(vk->device, "frag.spv");
+    VkPipelineShaderStageCreateInfo stages[2] = {
+        { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_VERTEX_BIT, .module = vertMod, .pName = "main" },
+        { .sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO,
+          .stage = VK_SHADER_STAGE_FRAGMENT_BIT, .module = fragMod, .pName = "main" },
     };
 
-    VkPipelineVertexInputStateCreateInfo vertexInput = {
+    VkPipelineVertexInputStateCreateInfo viInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
     };
-    VkPipelineInputAssemblyStateCreateInfo inputAssembly = {
+    VkPipelineInputAssemblyStateCreateInfo iaInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO,
         .topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_FAN,
     };
-
     VkDynamicState dynStates[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
-    VkPipelineDynamicStateCreateInfo dynamicState = {
+    VkPipelineDynamicStateCreateInfo dynInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .dynamicStateCount = 2,
         .pDynamicStates = dynStates,
     };
-
-    VkPipelineViewportStateCreateInfo viewportState = {
+    VkPipelineViewportStateCreateInfo vpInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO,
         .viewportCount = 1,
         .scissorCount = 1,
     };
-
-    VkPipelineRasterizationStateCreateInfo rasterizer = {
+    VkPipelineRasterizationStateCreateInfo rsInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
         .polygonMode = VK_POLYGON_MODE_FILL,
         .lineWidth = 1.0f,
         .cullMode = VK_CULL_MODE_BACK_BIT,
         .frontFace = VK_FRONT_FACE_CLOCKWISE,
     };
-
-    VkPipelineMultisampleStateCreateInfo multisampling = {
+    VkPipelineMultisampleStateCreateInfo msInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
         .rasterizationSamples = VK_SAMPLE_COUNT_1_BIT,
     };
-
-    VkPipelineColorBlendAttachmentState colorBlend = {
+    VkPipelineColorBlendAttachmentState cbAtt = {
         .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
                           VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
         .blendEnable = VK_FALSE,
     };
-
-    VkPipelineColorBlendStateCreateInfo colorBlending = {
+    VkPipelineColorBlendStateCreateInfo cbInfo = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO,
         .attachmentCount = 1,
-        .pAttachments = &colorBlend,
+        .pAttachments = &cbAtt,
     };
-
-    VkGraphicsPipelineCreateInfo pipelineInfo = {
+    VkGraphicsPipelineCreateInfo gpInfo = {
         .sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO,
         .stageCount = 2,
-        .pStages = shaderStages,
-        .pVertexInputState = &vertexInput,
-        .pInputAssemblyState = &inputAssembly,
-        .pViewportState = &viewportState,
-        .pRasterizationState = &rasterizer,
-        .pMultisampleState = &multisampling,
-        .pColorBlendState = &colorBlending,
-        .pDynamicState = &dynamicState,
+        .pStages = stages,
+        .pVertexInputState = &viInfo,
+        .pInputAssemblyState = &iaInfo,
+        .pViewportState = &vpInfo,
+        .pRasterizationState = &rsInfo,
+        .pMultisampleState = &msInfo,
+        .pColorBlendState = &cbInfo,
+        .pDynamicState = &dynInfo,
         .layout = vk->pipelineLayout,
         .renderPass = vk->renderPass,
         .subpass = 0,
     };
-    VK_CHECK(vkCreateGraphicsPipelines(vk->device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &vk->pipeline));
-
-    VkSamplerCreateInfo samplerInfo = {
+    VK_CHECK(vkCreateGraphicsPipelines(vk->device, VK_NULL_HANDLE, 1, &gpInfo, NULL, &vk->pipeline));
+    
+    // Create sampler (used in the descriptor set)
+    VkSamplerCreateInfo sampInfo = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .magFilter = VK_FILTER_LINEAR,
         .minFilter = VK_FILTER_LINEAR,
@@ -341,35 +328,34 @@ void initPipeline(VulkanState* vk) {
         .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
         .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
     };
-    VK_CHECK(vkCreateSampler(vk->device, &samplerInfo, NULL, &vk->textureSampler));
+    VK_CHECK(vkCreateSampler(vk->device, &sampInfo, NULL, &vk->textureSampler));
 
-    VkDescriptorPoolSize poolSize = {
+    // Create descriptor pool and allocate the descriptor set.
+    VkDescriptorPoolSize dpSize = {
         .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         .descriptorCount = 1,
     };
     VkDescriptorPoolCreateInfo dpInfo = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
         .poolSizeCount = 1,
-        .pPoolSizes = &poolSize,
+        .pPoolSizes = &dpSize,
         .maxSets = 1,
     };
     VK_CHECK(vkCreateDescriptorPool(vk->device, &dpInfo, NULL, &vk->descriptorPool));
-    VkDescriptorSetAllocateInfo dsAllocInfo = {
+    VkDescriptorSetAllocateInfo dsAlloc = {
         .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
         .descriptorPool = vk->descriptorPool,
         .descriptorSetCount = 1,
         .pSetLayouts = &vk->descriptorSetLayout,
     };
-    VK_CHECK(vkAllocateDescriptorSets(vk->device, &dsAllocInfo, &vk->descriptorSet));
+    VK_CHECK(vkAllocateDescriptorSets(vk->device, &dsAlloc, &vk->descriptorSet));
     
-    // We update the descriptor set with the texture view after texture creation.
-    
-    vkDestroyShaderModule(vk->device, fragModule, NULL);
-    vkDestroyShaderModule(vk->device, vertModule, NULL);
+    vkDestroyShaderModule(vk->device, fragMod, NULL);
+    vkDestroyShaderModule(vk->device, vertMod, NULL);
 }
 
 //
-// 4. Swapchain Creation (using fixed‑size arrays)
+// 4. Swapchain Creation (using fixed-size arrays)
 //
 void initSwapchain(VulkanState* vk) {
     VkSurfaceCapabilitiesKHR caps;
@@ -425,21 +411,19 @@ void initSwapchain(VulkanState* vk) {
 }
 
 //
-// 5. Persistent Staging Buffer Initialization (created only once)
+// 5. Staging Buffer Initialization (preallocate once)
 //
 void initStagingBuffer(VulkanState* vk) {
-    VkDeviceSize stagingSize = MAX_WIDTH * MAX_HEIGHT * 4;
+    VkDeviceSize size = MAX_WIDTH * MAX_HEIGHT * 4;
     VkBufferCreateInfo bufInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = stagingSize,
+        .size = size,
         .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
     };
     VK_CHECK(vkCreateBuffer(vk->device, &bufInfo, NULL, &vk->stagingBuffer));
-    
     VkMemoryRequirements memReq;
     vkGetBufferMemoryRequirements(vk->device, vk->stagingBuffer, &memReq);
-    
     VkMemoryAllocateInfo allocInfo = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = memReq.size,
@@ -448,13 +432,11 @@ void initStagingBuffer(VulkanState* vk) {
     };
     VK_CHECK(vkAllocateMemory(vk->device, &allocInfo, NULL, &vk->stagingMemory));
     VK_CHECK(vkBindBufferMemory(vk->device, vk->stagingBuffer, vk->stagingMemory, 0));
-    VK_CHECK(vkMapMemory(vk->device, vk->stagingMemory, 0, stagingSize, 0, &vk->stagingMapped));
+    VK_CHECK(vkMapMemory(vk->device, vk->stagingMemory, 0, size, 0, &vk->stagingMapped));
 }
 
 //
-// 6. Texture Creation (creates only the texture image, memory, and view)
-//    It then updates the descriptor set with the new texture view.
-//    Note: The staging buffer is not re-created here if it already exists.
+// 6. Texture Creation (create texture image, memory, view; update descriptor)
 //
 void initTexture(VulkanState* vk) {
     VkImageCreateInfo imgInfo = {
@@ -492,7 +474,7 @@ void initTexture(VulkanState* vk) {
     };
     VK_CHECK(vkCreateImageView(vk->device, &viewInfo, NULL, &vk->textureView));
 
-    // Update the descriptor set with the new texture view.
+    // Update descriptor set with new texture view.
     VkDescriptorImageInfo diInfo = {
         .sampler = vk->textureSampler,
         .imageView = vk->textureView,
@@ -508,15 +490,15 @@ void initTexture(VulkanState* vk) {
     };
     vkUpdateDescriptorSets(vk->device, 1, &writeDS, 0, NULL);
 
-    // Transition the texture image from UNDEFINED to SHADER_READ_ONLY_OPTIMAL.
-    VkCommandBufferAllocateInfo allocInfoCmd = {
+    // Transition texture image from UNDEFINED to SHADER_READ_ONLY_OPTIMAL.
+    VkCommandBufferAllocateInfo allocCmd = {
          .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
          .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
          .commandPool = vk->commandPool,
          .commandBufferCount = 1,
     };
     VkCommandBuffer tempCmd;
-    VK_CHECK(vkAllocateCommandBuffers(vk->device, &allocInfoCmd, &tempCmd));
+    VK_CHECK(vkAllocateCommandBuffers(vk->device, &allocCmd, &tempCmd));
     VkCommandBufferBeginInfo beginInfo = {
          .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
          .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT,
@@ -549,8 +531,7 @@ void initTexture(VulkanState* vk) {
 }
 
 //
-// 7. Update Texture Each Frame
-//    (Copy pixel data into the persistent staging buffer, then record commands to copy the buffer to the texture.)
+// 7. Update Texture Each Frame (uses preallocated staging buffer)
 //
 void updateTexture(VulkanState* vk) {
     size_t dataSize = vk->width * vk->height * 4;
@@ -612,29 +593,7 @@ void updateTexture(VulkanState* vk) {
 }
 
 //
-// 9. Resize Handling: Recreate Swapchain and Texture (but leave the persistent staging buffer intact)
-//
-void recreateSwapchain(VulkanState* vk, uint32_t newWidth, uint32_t newHeight) {
-    vkDeviceWaitIdle(vk->device);
-    for (uint32_t i = 0; i < vk->swapchainImageCount; i++) {
-        vkDestroyFramebuffer(vk->device, vk->swapchainFramebuffers[i], NULL);
-        vkDestroyImageView(vk->device, vk->swapchainImageViews[i], NULL);
-    }
-    vkDestroySwapchainKHR(vk->device, vk->swapchain, NULL);
-    vkDestroyImageView(vk->device, vk->textureView, NULL);
-    vkDestroyImage(vk->device, vk->textureImage, NULL);
-    vkFreeMemory(vk->device, vk->textureMemory, NULL);
-    
-    vk->width = newWidth;
-    vk->height = newHeight;
-    initSwapchain(vk);
-    initTexture(vk);
-}
-
-
-//
 // 8. Render a Frame
-//    (Acquire a swapchain image, record commands to clear and draw a full‑screen quad, then present.)
 //
 void renderFrame(VulkanState* vk) {
     VK_CHECK(vkWaitForFences(vk->device, 1, &vk->inFlightFence, VK_TRUE, UINT64_MAX));
@@ -647,9 +606,7 @@ void renderFrame(VulkanState* vk) {
         VK_CHECK(result);
     
     VK_CHECK(vkResetCommandBuffer(vk->commandBuffer, 0));
-    VkCommandBufferBeginInfo beginInfo = {
-         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-    };
+    VkCommandBufferBeginInfo beginInfo = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
     VK_CHECK(vkBeginCommandBuffer(vk->commandBuffer, &beginInfo));
     
     VkClearValue clearValue = { .color = { { 0.0f, 0.0f, 0.0f, 1.0f } } };
@@ -669,10 +626,7 @@ void renderFrame(VulkanState* vk) {
          .minDepth = 0.0f, .maxDepth = 1.0f,
     };
     vkCmdSetViewport(vk->commandBuffer, 0, 1, &viewport);
-    VkRect2D scissor = {
-         .offset = {0, 0},
-         .extent = { vk->width, vk->height },
-    };
+    VkRect2D scissor = { .offset = {0, 0}, .extent = { vk->width, vk->height } };
     vkCmdSetScissor(vk->commandBuffer, 0, 1, &scissor);
     
     vkCmdBindPipeline(vk->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline);
@@ -707,18 +661,35 @@ void renderFrame(VulkanState* vk) {
     if (presResult == VK_ERROR_OUT_OF_DATE_KHR || presResult == VK_SUBOPTIMAL_KHR) {
          int newWidth, newHeight;
          glfwGetFramebufferSize(vk->window, &newWidth, &newHeight);
-         if (newWidth > 0 && newHeight > 0) {
-             // Recreate swapchain and texture (but NOT the staging buffer).
+         if (newWidth > 0 && newHeight > 0)
              recreateSwapchain(vk, newWidth, newHeight);
-         }
     } else {
          VK_CHECK(presResult);
     }
 }
 
+//
+// 9. Resize Handling: Recreate Swapchain and Texture (but keep staging buffer intact)
+//
+void recreateSwapchain(VulkanState* vk, uint32_t newWidth, uint32_t newHeight) {
+    vkDeviceWaitIdle(vk->device);
+    for (uint32_t i = 0; i < vk->swapchainImageCount; i++) {
+        vkDestroyFramebuffer(vk->device, vk->swapchainFramebuffers[i], NULL);
+        vkDestroyImageView(vk->device, vk->swapchainImageViews[i], NULL);
+    }
+    vkDestroySwapchainKHR(vk->device, vk->swapchain, NULL);
+    vkDestroyImageView(vk->device, vk->textureView, NULL);
+    vkDestroyImage(vk->device, vk->textureImage, NULL);
+    vkFreeMemory(vk->device, vk->textureMemory, NULL);
+    
+    vk->width = newWidth;
+    vk->height = newHeight;
+    initSwapchain(vk);
+    initTexture(vk);
+}
 
 //
-// 10. GLFW Callback for Resizing
+// 10. GLFW Resize Callback
 //
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     if (width < MIN_WINDOW_WIDTH || height < MIN_WINDOW_HEIGHT)
@@ -729,26 +700,20 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 }
 
 //
-// 11. Utility: Create Shader Module from SPIR-V File
+// 11. Create Shader Module from SPIR-V File
 //
 VkShaderModule createShaderModule(VkDevice device, const char* filename) {
     FILE* file = fopen(filename, "rb");
-    if (!file) {
-        fprintf(stderr, "Failed to open shader file: %s\n", filename);
-        exit(1);
-    }
+    if (!file) { fprintf(stderr, "Failed to open shader file: %s\n", filename); exit(1); }
     fseek(file, 0, SEEK_END);
     long codeSize = ftell(file);
     rewind(file);
     char* code = (char*)malloc(codeSize);
     if (fread(code, 1, codeSize, file) != (size_t)codeSize) {
         fprintf(stderr, "Failed to read shader file: %s\n", filename);
-        free(code);
-        fclose(file);
-        exit(1);
+        free(code); fclose(file); exit(1);
     }
     fclose(file);
-    
     VkShaderModuleCreateInfo createInfo = {
         .sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO,
         .codeSize = codeSize,
@@ -761,7 +726,7 @@ VkShaderModule createShaderModule(VkDevice device, const char* filename) {
 }
 
 //
-// 12. Utility: Find a Suitable Memory Type
+// 12. Find a Suitable Memory Type
 //
 uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
     VkPhysicalDeviceMemoryProperties memProps;
@@ -775,8 +740,7 @@ uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, Vk
 }
 
 //
-// 13. Consolidated Initialization:
-//      Create Instance/Device, Query Format, Initialize Pipeline, Swapchain, Staging Buffer, and Texture.
+// 13. Consolidated Initialization: Preallocate all data in init functions
 //
 void initVulkanState(VulkanState* vk, GLFWwindow* window, uint32_t width, uint32_t height) {
     vk->window = window;
@@ -786,13 +750,12 @@ void initVulkanState(VulkanState* vk, GLFWwindow* window, uint32_t width, uint32
     querySwapchainFormat(vk);
     initPipeline(vk);
     initSwapchain(vk);
-    // Create the persistent staging buffer once.
     initStagingBuffer(vk);
     initTexture(vk);
 }
 
 //
-// 14. Main: Create Window, Allocate Pixel Buffer, Initialize Vulkan, and Run the Render Loop.
+// 14. Main: Create Window, Preallocate Pixel Buffer, Initialize Vulkan, and Render Loop
 //
 int main() {
     VulkanState vkState = {0};
@@ -815,12 +778,9 @@ int main() {
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
     glfwSetWindowUserPointer(window, &vkState);
     
-    // Allocate the pixel buffer on the heap.
+    // Preallocate the pixel buffer (for maximum possible size).
     vkState.pixels = malloc(MAX_WIDTH * MAX_HEIGHT * 4);
-    if (!vkState.pixels) {
-        fprintf(stderr, "Failed to allocate pixel buffer\n");
-        return -1;
-    }
+    if (!vkState.pixels) { fprintf(stderr, "Failed to allocate pixel buffer\n"); return -1; }
     
     initVulkanState(&vkState, window, initWidth, initHeight);
     
@@ -841,7 +801,7 @@ int main() {
     
     vkDeviceWaitIdle(vkState.device);
     
-    // Cleanup
+    // Cleanup (release preallocated resources)
     for (uint32_t i = 0; i < vkState.swapchainImageCount; i++) {
         vkDestroyFramebuffer(vkState.device, vkState.swapchainFramebuffers[i], NULL);
         vkDestroyImageView(vkState.device, vkState.swapchainImageViews[i], NULL);
