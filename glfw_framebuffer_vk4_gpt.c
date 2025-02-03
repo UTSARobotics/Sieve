@@ -182,7 +182,7 @@ void initInstanceAndDevice(VulkanState* vk) {
 }
 
 //
-// 2. Query the swapchain format early (so that the render pass uses a valid format).
+// 2. Query Swapchain Format (so the render pass uses a valid format)
 //
 void querySwapchainFormat(VulkanState* vk) {
     uint32_t formatCount = 0;
@@ -205,7 +205,6 @@ void querySwapchainFormat(VulkanState* vk) {
 // 3. Pipeline, Render Pass, and Descriptor Setup
 //
 void initPipeline(VulkanState* vk) {
-    // Render pass.
     VkAttachmentDescription colorAttachment = {
         .format = vk->swapchainFormat,
         .samples = VK_SAMPLE_COUNT_1_BIT,
@@ -234,7 +233,6 @@ void initPipeline(VulkanState* vk) {
     };
     VK_CHECK(vkCreateRenderPass(vk->device, &rpInfo, NULL, &vk->renderPass));
 
-    // Descriptor set layout: one combined image sampler.
     VkDescriptorSetLayoutBinding samplerBinding = {
         .binding = 0,
         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -255,7 +253,6 @@ void initPipeline(VulkanState* vk) {
     };
     VK_CHECK(vkCreatePipelineLayout(vk->device, &plInfo, NULL, &vk->pipelineLayout));
 
-    // Create shader modules.
     VkShaderModule vertModule = createShaderModule(vk->device, "vert.spv");
     VkShaderModule fragModule = createShaderModule(vk->device, "frag.spv");
     VkPipelineShaderStageCreateInfo shaderStages[2] = {
@@ -273,7 +270,6 @@ void initPipeline(VulkanState* vk) {
         }
     };
 
-    // No vertex input (we use gl_VertexIndex in the shader).
     VkPipelineVertexInputStateCreateInfo vertexInput = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
     };
@@ -337,7 +333,6 @@ void initPipeline(VulkanState* vk) {
     };
     VK_CHECK(vkCreateGraphicsPipelines(vk->device, VK_NULL_HANDLE, 1, &pipelineInfo, NULL, &vk->pipeline));
 
-    // Create sampler.
     VkSamplerCreateInfo samplerInfo = {
         .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
         .magFilter = VK_FILTER_LINEAR,
@@ -348,7 +343,6 @@ void initPipeline(VulkanState* vk) {
     };
     VK_CHECK(vkCreateSampler(vk->device, &samplerInfo, NULL, &vk->textureSampler));
 
-    // Create descriptor pool and allocate the descriptor set.
     VkDescriptorPoolSize poolSize = {
         .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
         .descriptorCount = 1,
@@ -367,7 +361,8 @@ void initPipeline(VulkanState* vk) {
         .pSetLayouts = &vk->descriptorSetLayout,
     };
     VK_CHECK(vkAllocateDescriptorSets(vk->device, &dsAllocInfo, &vk->descriptorSet));
-    // (We'll update the descriptor with the valid texture view after creating the texture.)
+    
+    // We update the descriptor set with the texture view after texture creation.
     
     vkDestroyShaderModule(vk->device, fragModule, NULL);
     vkDestroyShaderModule(vk->device, vertModule, NULL);
@@ -430,7 +425,36 @@ void initSwapchain(VulkanState* vk) {
 }
 
 //
-// 5. Texture and Persistent Staging Buffer
+// 5. Persistent Staging Buffer Initialization (created only once)
+//
+void initStagingBuffer(VulkanState* vk) {
+    VkDeviceSize stagingSize = MAX_WIDTH * MAX_HEIGHT * 4;
+    VkBufferCreateInfo bufInfo = {
+        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
+        .size = stagingSize,
+        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
+    };
+    VK_CHECK(vkCreateBuffer(vk->device, &bufInfo, NULL, &vk->stagingBuffer));
+    
+    VkMemoryRequirements memReq;
+    vkGetBufferMemoryRequirements(vk->device, vk->stagingBuffer, &memReq);
+    
+    VkMemoryAllocateInfo allocInfo = {
+        .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
+        .allocationSize = memReq.size,
+        .memoryTypeIndex = findMemoryType(vk->physicalDevice, memReq.memoryTypeBits,
+                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT),
+    };
+    VK_CHECK(vkAllocateMemory(vk->device, &allocInfo, NULL, &vk->stagingMemory));
+    VK_CHECK(vkBindBufferMemory(vk->device, vk->stagingBuffer, vk->stagingMemory, 0));
+    VK_CHECK(vkMapMemory(vk->device, vk->stagingMemory, 0, stagingSize, 0, &vk->stagingMapped));
+}
+
+//
+// 6. Texture Creation (creates only the texture image, memory, and view)
+//    It then updates the descriptor set with the new texture view.
+//    Note: The staging buffer is not re-created here if it already exists.
 //
 void initTexture(VulkanState* vk) {
     VkImageCreateInfo imgInfo = {
@@ -468,7 +492,7 @@ void initTexture(VulkanState* vk) {
     };
     VK_CHECK(vkCreateImageView(vk->device, &viewInfo, NULL, &vk->textureView));
 
-    // Update descriptor set with the newly created texture view.
+    // Update the descriptor set with the new texture view.
     VkDescriptorImageInfo diInfo = {
         .sampler = vk->textureSampler,
         .imageView = vk->textureView,
@@ -484,24 +508,7 @@ void initTexture(VulkanState* vk) {
     };
     vkUpdateDescriptorSets(vk->device, 1, &writeDS, 0, NULL);
 
-    // Create a persistent staging buffer sized for MAX_WIDTH*MAX_HEIGHT*4.
-    VkDeviceSize stagingSize = MAX_WIDTH * MAX_HEIGHT * 4;
-    VkBufferCreateInfo bufInfo = {
-        .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
-        .size = stagingSize,
-        .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
-        .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
-    };
-    VK_CHECK(vkCreateBuffer(vk->device, &bufInfo, NULL, &vk->stagingBuffer));
-    vkGetBufferMemoryRequirements(vk->device, vk->stagingBuffer, &memReq);
-    allocInfo.allocationSize = memReq.size;
-    allocInfo.memoryTypeIndex = findMemoryType(vk->physicalDevice, memReq.memoryTypeBits,
-                                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-    VK_CHECK(vkAllocateMemory(vk->device, &allocInfo, NULL, &vk->stagingMemory));
-    VK_CHECK(vkBindBufferMemory(vk->device, vk->stagingBuffer, vk->stagingMemory, 0));
-    VK_CHECK(vkMapMemory(vk->device, vk->stagingMemory, 0, stagingSize, 0, &vk->stagingMapped));
-
-    // Transition texture image from UNDEFINED to SHADER_READ_ONLY_OPTIMAL.
+    // Transition the texture image from UNDEFINED to SHADER_READ_ONLY_OPTIMAL.
     VkCommandBufferAllocateInfo allocInfoCmd = {
          .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
          .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
@@ -542,11 +549,8 @@ void initTexture(VulkanState* vk) {
 }
 
 //
-// 6. Update Texture Each Frame
-//    (Copy pixel data into the persistent staging buffer, then record a command buffer that:
-//     - transitions the texture image from SHADER_READ_ONLY_OPTIMAL to TRANSFER_DST_OPTIMAL,
-//     - copies the buffer to the image, and
-//     - transitions back to SHADER_READ_ONLY_OPTIMAL.)
+// 7. Update Texture Each Frame
+//    (Copy pixel data into the persistent staging buffer, then record commands to copy the buffer to the texture.)
 //
 void updateTexture(VulkanState* vk) {
     size_t dataSize = vk->width * vk->height * 4;
@@ -596,7 +600,6 @@ void updateTexture(VulkanState* vk) {
     
     VK_CHECK(vkEndCommandBuffer(vk->commandBuffer));
     
-    // Submit the update command buffer without waiting on any semaphore.
     VkSubmitInfo submitInfo = {
          .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
          .commandBufferCount = 1,
@@ -608,10 +611,8 @@ void updateTexture(VulkanState* vk) {
     VK_CHECK(vkQueueWaitIdle(vk->graphicsQueue));
 }
 
-
-
 //
-// 8. Resize Handling: Recreate Swapchain and Texture
+// 9. Resize Handling: Recreate Swapchain and Texture (but leave the persistent staging buffer intact)
 //
 void recreateSwapchain(VulkanState* vk, uint32_t newWidth, uint32_t newHeight) {
     vkDeviceWaitIdle(vk->device);
@@ -630,16 +631,12 @@ void recreateSwapchain(VulkanState* vk, uint32_t newWidth, uint32_t newHeight) {
     initTexture(vk);
 }
 
+
 //
-// 7. Render Frame
-//    Acquire a swapchain image, record a command buffer that clears and draws a full‑screen quad,
-//    then submit the command buffer (waiting on the "image available" semaphore and signaling
-//    "render finished") and present.
-//    (Note: We use the same command buffer that updateTexture() used, but since we wait for idle
-//     after updateTexture(), it is safe to re‑record it here.)
+// 8. Render a Frame
+//    (Acquire a swapchain image, record commands to clear and draw a full‑screen quad, then present.)
 //
 void renderFrame(VulkanState* vk) {
-    // Wait for the previous frame to finish.
     VK_CHECK(vkWaitForFences(vk->device, 1, &vk->inFlightFence, VK_TRUE, UINT64_MAX));
     VK_CHECK(vkResetFences(vk->device, 1, &vk->inFlightFence));
     
@@ -649,9 +646,10 @@ void renderFrame(VulkanState* vk) {
     if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
         VK_CHECK(result);
     
-    // Record command buffer.
     VK_CHECK(vkResetCommandBuffer(vk->commandBuffer, 0));
-    VkCommandBufferBeginInfo beginInfo = { .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO };
+    VkCommandBufferBeginInfo beginInfo = {
+         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+    };
     VK_CHECK(vkBeginCommandBuffer(vk->commandBuffer, &beginInfo));
     
     VkClearValue clearValue = { .color = { { 0.0f, 0.0f, 0.0f, 1.0f } } };
@@ -665,7 +663,6 @@ void renderFrame(VulkanState* vk) {
     };
     vkCmdBeginRenderPass(vk->commandBuffer, &rpBegin, VK_SUBPASS_CONTENTS_INLINE);
     
-    // Set dynamic viewport and scissor.
     VkViewport viewport = {
          .x = 0.0f, .y = 0.0f,
          .width = (float)vk->width, .height = (float)vk->height,
@@ -686,7 +683,6 @@ void renderFrame(VulkanState* vk) {
     vkCmdEndRenderPass(vk->commandBuffer);
     VK_CHECK(vkEndCommandBuffer(vk->commandBuffer));
     
-    // Submit the render command buffer.
     VkSubmitInfo submitInfo = {
          .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
          .waitSemaphoreCount = 1,
@@ -709,10 +705,10 @@ void renderFrame(VulkanState* vk) {
     };
     VkResult presResult = vkQueuePresentKHR(vk->graphicsQueue, &presentInfo);
     if (presResult == VK_ERROR_OUT_OF_DATE_KHR || presResult == VK_SUBOPTIMAL_KHR) {
-         // The swapchain is no longer valid—recreate it using the current framebuffer size.
          int newWidth, newHeight;
          glfwGetFramebufferSize(vk->window, &newWidth, &newHeight);
          if (newWidth > 0 && newHeight > 0) {
+             // Recreate swapchain and texture (but NOT the staging buffer).
              recreateSwapchain(vk, newWidth, newHeight);
          }
     } else {
@@ -720,8 +716,9 @@ void renderFrame(VulkanState* vk) {
     }
 }
 
+
 //
-// 9. GLFW Callback for Resizing
+// 10. GLFW Callback for Resizing
 //
 void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
     if (width < MIN_WINDOW_WIDTH || height < MIN_WINDOW_HEIGHT)
@@ -732,7 +729,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 }
 
 //
-// 10. Utility: Create Shader Module from SPIR-V File
+// 11. Utility: Create Shader Module from SPIR-V File
 //
 VkShaderModule createShaderModule(VkDevice device, const char* filename) {
     FILE* file = fopen(filename, "rb");
@@ -764,7 +761,7 @@ VkShaderModule createShaderModule(VkDevice device, const char* filename) {
 }
 
 //
-// 11. Utility: Find Suitable Memory Type
+// 12. Utility: Find a Suitable Memory Type
 //
 uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, VkMemoryPropertyFlags properties) {
     VkPhysicalDeviceMemoryProperties memProps;
@@ -778,8 +775,8 @@ uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, Vk
 }
 
 //
-// 12. Consolidated Initialization: Create Instance/Device, Query Format,
-//     Create Pipeline, Swapchain, and Texture, and update the descriptor set.
+// 13. Consolidated Initialization:
+//      Create Instance/Device, Query Format, Initialize Pipeline, Swapchain, Staging Buffer, and Texture.
 //
 void initVulkanState(VulkanState* vk, GLFWwindow* window, uint32_t width, uint32_t height) {
     vk->window = window;
@@ -789,11 +786,13 @@ void initVulkanState(VulkanState* vk, GLFWwindow* window, uint32_t width, uint32
     querySwapchainFormat(vk);
     initPipeline(vk);
     initSwapchain(vk);
+    // Create the persistent staging buffer once.
+    initStagingBuffer(vk);
     initTexture(vk);
 }
 
 //
-// 13. Main: Create Window, Allocate Pixel Buffer, Initialize Vulkan, and Run Render Loop
+// 14. Main: Create Window, Allocate Pixel Buffer, Initialize Vulkan, and Run the Render Loop.
 //
 int main() {
     VulkanState vkState = {0};
