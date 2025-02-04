@@ -24,13 +24,13 @@ typedef struct {
     uint32_t graphicsQueueFamily;
     VkSurfaceKHR surface;
     VkSwapchainKHR swapchain;
-    
+
     // For our dynamic framebuffer texture
     VkImage textureImage;
     VkDeviceMemory textureMemory;
     VkImageView textureView;
     VkSampler textureSampler;
-    
+
     // Pipeline resources
     VkRenderPass renderPass;
     VkPipelineLayout pipelineLayout;
@@ -49,16 +49,21 @@ typedef struct {
     VkImageView* swapchainImageViews;
     VkFramebuffer* swapchainFramebuffers;
 
+    // buffer memory
+    VkBuffer* stagingBuffer;
+    VkDeviceMemory* stagingMemory;
+    void* stagingMapped;
+
     // Sync objects
     VkSemaphore imageAvailable;
     VkSemaphore renderFinished;
     VkFence inFlightFence;
-    
+
     // Dynamic size info
     uint32_t width;
     uint32_t height;
     uint8_t* pixels;
-    
+
     // Window
     GLFWwindow* window;
 } VulkanState;
@@ -116,7 +121,7 @@ uint32_t findMemoryType(VkPhysicalDevice physicalDevice, uint32_t typeFilter, Vk
     vkGetPhysicalDeviceMemoryProperties(physicalDevice, &memProperties);
 
     for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-        if ((typeFilter & (1 << i)) && 
+        if ((typeFilter & (1 << i)) &&
             (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
             return i;
         }
@@ -139,7 +144,7 @@ void createSwapchain(VulkanState* vk) {
     vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physicalDevice, vk->surface, &formatCount, NULL);
     VkSurfaceFormatKHR* formats = malloc(formatCount * sizeof(VkSurfaceFormatKHR));
     vkGetPhysicalDeviceSurfaceFormatsKHR(vk->physicalDevice, vk->surface, &formatCount, formats);
-    
+
     // Choose first available format, but prefer B8G8R8A8_UNORM
     vk->swapchainFormat = formats[0].format;
     for (uint32_t i = 0; i < formatCount; i++) {
@@ -173,7 +178,7 @@ void createSwapchain(VulkanState* vk) {
     vk->swapchainImages = malloc(vk->swapchainImageCount * sizeof(VkImage));
     vk->swapchainImageViews = malloc(vk->swapchainImageCount * sizeof(VkImageView));
     vk->swapchainFramebuffers = malloc(vk->swapchainImageCount * sizeof(VkFramebuffer));
-    
+
     vkGetSwapchainImagesKHR(vk->device, vk->swapchain, &vk->swapchainImageCount, vk->swapchainImages);
 
     // Create image views and framebuffers
@@ -227,21 +232,21 @@ VkResult createTexture(VulkanState* vk) {
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE,
         .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED
     };
-    
+
     VK_CHECK(vkCreateImage(vk->device, &imageInfo, NULL, &vk->textureImage));
-    
+
     VkMemoryRequirements memReqs;
     vkGetImageMemoryRequirements(vk->device, vk->textureImage, &memReqs);
-    
+
     VkMemoryAllocateInfo allocInfo = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = memReqs.size,
         .memoryTypeIndex = findMemoryType(vk->physicalDevice, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
     };
-    
+
     VK_CHECK(vkAllocateMemory(vk->device, &allocInfo, NULL, &vk->textureMemory));
     VK_CHECK(vkBindImageMemory(vk->device, vk->textureImage, vk->textureMemory, 0));
-    
+
     VkImageViewCreateInfo viewInfo = {
         .sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO,
         .image = vk->textureImage,
@@ -255,9 +260,9 @@ VkResult createTexture(VulkanState* vk) {
             .layerCount = 1
         }
     };
-    
+
     VK_CHECK(vkCreateImageView(vk->device, &viewInfo, NULL, &vk->textureView));
-    
+
     return VK_SUCCESS;
 }
 
@@ -319,39 +324,33 @@ void recreateSwapchain(VulkanState* vk, uint32_t newWidth, uint32_t newHeight) {
 void updateTexture(VulkanState* vk) {
     VkBuffer stagingBuffer;
     VkDeviceMemory stagingMemory;
-    
+
     VkBufferCreateInfo bufferInfo = {
         .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO,
         .size = vk->width * vk->height * 4,
         .usage = VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
         .sharingMode = VK_SHARING_MODE_EXCLUSIVE
     };
-    
+
     VK_CHECK(vkCreateBuffer(vk->device, &bufferInfo, NULL, &stagingBuffer));
-    
+
     VkMemoryRequirements memReqs;
     vkGetBufferMemoryRequirements(vk->device, stagingBuffer, &memReqs);
-    
+
     VkMemoryAllocateInfo allocInfo = {
         .sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO,
         .allocationSize = memReqs.size,
         .memoryTypeIndex = findMemoryType(vk->physicalDevice, memReqs.memoryTypeBits,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
     };
-    
-    VK_CHECK(vkAllocateMemory(vk->device, &allocInfo, NULL, &stagingMemory));
-    VK_CHECK(vkBindBufferMemory(vk->device, stagingBuffer, stagingMemory, 0));
-    
-    void* data;
-    vkMapMemory(vk->device, stagingMemory, 0, bufferInfo.size, 0, &data);
-    memcpy(data, vk->pixels, vk->width * vk->height * 4);
-    vkUnmapMemory(vk->device, stagingMemory);
+
+    memcpy(vk->stagingMapped, vk->pixels, vk->width * vk->height * 4);
 
     VkCommandBufferBeginInfo beginInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
         .flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT
     };
-    
+
     VK_CHECK(vkBeginCommandBuffer(vk->commandBuffer, &beginInfo));
 
     VkImageMemoryBarrier barrier = {
@@ -371,7 +370,7 @@ void updateTexture(VulkanState* vk) {
         .srcAccessMask = 0,
         .dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT
     };
-    
+
     vkCmdPipelineBarrier(vk->commandBuffer,
         VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
@@ -379,7 +378,7 @@ void updateTexture(VulkanState* vk) {
         0, NULL,
         0, NULL,
         1, &barrier);
-    
+
     VkBufferImageCopy region = {
         .bufferOffset = 0,
         .bufferRowLength = 0,
@@ -393,18 +392,18 @@ void updateTexture(VulkanState* vk) {
         .imageOffset = {0, 0, 0},
         .imageExtent = {vk->width, vk->height, 1}
     };
-    
+
     vkCmdCopyBufferToImage(vk->commandBuffer,
         stagingBuffer,
         vk->textureImage,
         VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
         1, &region);
-    
+
     barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
     barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
     barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    
+
     vkCmdPipelineBarrier(vk->commandBuffer,
         VK_PIPELINE_STAGE_TRANSFER_BIT,
         VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
@@ -412,45 +411,45 @@ void updateTexture(VulkanState* vk) {
         0, NULL,
         0, NULL,
         1, &barrier);
-    
+
     VK_CHECK(vkEndCommandBuffer(vk->commandBuffer));
-    
+
     VkSubmitInfo submitInfo = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .commandBufferCount = 1,
         .pCommandBuffers = &vk->commandBuffer
     };
-    
+
     VK_CHECK(vkQueueSubmit(vk->graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE));
     vkQueueWaitIdle(vk->graphicsQueue);
-    
+
     vkDestroyBuffer(vk->device, stagingBuffer, NULL);
     vkFreeMemory(vk->device, stagingMemory, NULL);
-}    
+}
 
 // Render a frame. If the presentation returns VK_ERROR_OUT_OF_DATE_KHR or VK_SUBOPTIMAL_KHR,
 // then the swapchain is recreated.
 void render(VulkanState* vk) {
     vkWaitForFences(vk->device, 1, &vk->inFlightFence, VK_TRUE, UINT64_MAX);
     vkResetFences(vk->device, 1, &vk->inFlightFence);
-    
+
     uint32_t imageIndex;
-    VkResult result = vkAcquireNextImageKHR(vk->device, vk->swapchain, UINT64_MAX, 
+    VkResult result = vkAcquireNextImageKHR(vk->device, vk->swapchain, UINT64_MAX,
                                              vk->imageAvailable, VK_NULL_HANDLE, &imageIndex);
     if (result == VK_ERROR_OUT_OF_DATE_KHR) {
         return;  // Skip this frame; the framebuffer callback will trigger a swapchain recreation.
     } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
         VK_CHECK(result);
     }
-    
+
     vkResetCommandBuffer(vk->commandBuffer, 0);
-    
+
     VkCommandBufferBeginInfo beginInfo = {
         .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO
     };
-    
+
     VK_CHECK(vkBeginCommandBuffer(vk->commandBuffer, &beginInfo));
-    
+
     VkClearValue clearValue = {{{0.0f, 0.0f, 0.0f, 1.0f}}};
     VkRenderPassBeginInfo renderPassInfo = {
         .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
@@ -461,9 +460,9 @@ void render(VulkanState* vk) {
         .clearValueCount = 1,
         .pClearValues = &clearValue
     };
-    
+
     vkCmdBeginRenderPass(vk->commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-    
+
     // Set dynamic viewport and scissor:
     VkViewport viewport = {
         .x = 0.0f,
@@ -474,25 +473,25 @@ void render(VulkanState* vk) {
         .maxDepth = 1.0f
     };
     vkCmdSetViewport(vk->commandBuffer, 0, 1, &viewport);
-    
+
     VkRect2D scissor = {
         .offset = {0, 0},
         .extent = {vk->width, vk->height}
     };
     vkCmdSetScissor(vk->commandBuffer, 0, 1, &scissor);
-    
+
     vkCmdBindPipeline(vk->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk->pipeline);
     vkCmdBindDescriptorSets(vk->commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
         vk->pipelineLayout, 0, 1, &vk->descriptorSet, 0, NULL);
-    
+
     vkCmdDraw(vk->commandBuffer, 4, 1, 0, 0);
-    
+
     vkCmdEndRenderPass(vk->commandBuffer);
-    
+
     VK_CHECK(vkEndCommandBuffer(vk->commandBuffer));
-    
+
     VkPipelineStageFlags waitStages[] = {VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
-    
+
     VkSubmitInfo submitInfo = {
         .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
         .waitSemaphoreCount = 1,
@@ -503,9 +502,9 @@ void render(VulkanState* vk) {
         .signalSemaphoreCount = 1,
         .pSignalSemaphores = &vk->renderFinished
     };
-    
+
     VK_CHECK(vkQueueSubmit(vk->graphicsQueue, 1, &submitInfo, vk->inFlightFence));
-    
+
     VkPresentInfoKHR presentInfo = {
         .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
         .waitSemaphoreCount = 1,
@@ -514,7 +513,7 @@ void render(VulkanState* vk) {
         .pSwapchains = &vk->swapchain,
         .pImageIndices = &imageIndex
     };
-    
+
     result = vkQueuePresentKHR(vk->graphicsQueue, &presentInfo);
     if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR) {
         int width, height;
@@ -564,7 +563,7 @@ void vk_init(VulkanState* vk) {
     uint32_t deviceCount = 0;
     printf("Enumerating physical devices...\n");
     VK_CHECK(vkEnumeratePhysicalDevices(vk->instance, &deviceCount, NULL));
-    
+
     if (deviceCount == 0) {
         fprintf(stderr, "Failed to find GPUs with Vulkan support\n");
         exit(1);
@@ -577,7 +576,7 @@ void vk_init(VulkanState* vk) {
         VkPhysicalDeviceProperties props;
         vkGetPhysicalDeviceProperties(devices[i], &props);
         printf("Device %d: %s\n", i, props.deviceName);
-        
+
         // Prefer discrete GPU
         if (props.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
             vk->physicalDevice = devices[i];
@@ -585,7 +584,7 @@ void vk_init(VulkanState* vk) {
             break;
         }
     }
-    
+
     if (vk->physicalDevice == VK_NULL_HANDLE) {
         vk->physicalDevice = devices[0];
     }
@@ -601,7 +600,7 @@ void vk_init(VulkanState* vk) {
     for (uint32_t i = 0; i < queueFamilyCount; i++) {
         VkBool32 presentSupport = VK_FALSE;
         VK_CHECK(vkGetPhysicalDeviceSurfaceSupportKHR(vk->physicalDevice, i, vk->surface, &presentSupport));
-        
+
         if ((queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) && presentSupport) {
             vk->graphicsQueueFamily = i;
             break;
@@ -813,7 +812,7 @@ void vk_init_pipeline(VulkanState* vk) {
         VK_DYNAMIC_STATE_VIEWPORT,
         VK_DYNAMIC_STATE_SCISSOR
     };
-    
+
     VkPipelineDynamicStateCreateInfo dynamicState = {
         .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
         .dynamicStateCount = 2,
@@ -967,7 +966,7 @@ int main() {
     vkDestroyRenderPass(vk.device, vk.renderPass, NULL);
     vkDestroyDescriptorSetLayout(vk.device, vk.descriptorSetLayout, NULL);
     vkDestroyDescriptorPool(vk.device, vk.descriptorPool, NULL);
-    
+
     if (vk.textureImage != VK_NULL_HANDLE) {
         vkDestroySampler(vk.device, vk.textureSampler, NULL);
         vkDestroyImageView(vk.device, vk.textureView, NULL);
