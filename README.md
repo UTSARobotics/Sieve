@@ -10,7 +10,7 @@ SMART is the smart way to log data and generate soil microscopy reports.
 - Load parameters from file (magnification, dilution, fov, droplet size)
 - Generate csv, html reports from folder.
 
-## Future
+## Future Features
 - Label protozoa, nematodes, bacteria, microarthropods, rotifer  
 - Zoom
 - Image enhancement (softHDR, sharpen, etc.)
@@ -25,6 +25,14 @@ SMART is the smart way to log data and generate soil microscopy reports.
 - Bounding box counts
 - Bacteria click to count
 - Worldwide soil microscopy database
+
+## Technical TODO
+-[ ] hare image opening
+-[ ] hare glfw/vulkan
+-[ ] save data files as wxf, tocktick with cross-platform performance-counter
+-[ ] base64 the fragment/vertex spirv??
+-[ ] hare warren (ravenring)
+-[ ] breed metacompiler for windows C gen from hare.
 
 ## Dependencies
 This program vendors dependencies, or includes a copy of the dependency used in building. This is done for reliability and stability reasons, and partially for performance. It also discourages the proliferation of complex dependencies.
