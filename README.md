@@ -27,12 +27,21 @@ SMART is the smart way to log data and generate soil microscopy reports.
 - Worldwide soil microscopy database
 
 ## Technical TODO
--[ ] hare image opening
--[ ] hare glfw/vulkan
--[ ] save data files as wxf, tocktick with cross-platform performance-counter
--[ ] base64 the fragment/vertex spirv??
--[ ] hare warren (ravenring)
--[ ] breed metacompiler for windows C gen from hare.
+- [ ] makefile for project (build dep. static libraries, link hare program)
+- [ ] hare tocktick, cross-platform tocktick program counter
+- [ ] hare image opening
+- [ ] hare glfw/vulkan (link to c graphics framebuffer lib)
+- [ ] hex array header gen for the fragment/vertex spirv (write hare program for this)
+- [ ] display image
+- [ ] draw squares on framebuffer
+- [ ] draw text on framebuffer
+- [ ] draw lines on framebuffer image
+- [ ] draw lines when keypress, parallel line expand on keypress
+- [ ] navigation
+- [ ] save line data files as wxf
+- [ ] AVX on x86, neon on arm
+- [ ] hare warren (ravenring)
+- [ ] breed metacompiler for windows C gen from hare.
 
 ## Dependencies
 This program vendors dependencies, or includes a copy of the dependency used in building. This is done for reliability and stability reasons, and partially for performance. It also discourages the proliferation of complex dependencies.
@@ -87,12 +96,38 @@ Target: x86_64-pc-linux-gnu
 Thread model: posix
 ```
 
-Consider using the following compiler flags:
+Consider using the following flags:
+- compilation of a c program
 ```
-clang -c -std=c11 -Wall -Wextra -Wpedantic -Werror -fsanitize=address,undefined -fno-omit-frame-pointer -fstack-protector-all -D_FORTIFY_SOURCE=2 -O3 -ffunction-sections -fdata-sections -Wl,--gc-sections -flto
+clang -c -std=c11 -Wall -Wextra -Wpedantic -Werror \
+-fsanitize=address,undefined \
+-fno-omit-frame-pointer \ # easier debugging
+-fstack-protector-all -D_FORTIFY_SOURCE=2 \
+-fvisibility=hidden -fvisibility-inlines-hidden \
+-Os \ # or -Oz for tiny
+-ffunction-sections -fdata-sections -Wl,--gc-sections,--icf=safe \
+-flto
+```
+- compilation of library `-DCMAKE_C_COMPILER=clang-15 -DCMAKE_CXX_COMPILER=clang++-15`
+```
+-Wall -Wextra -Wpedantic -Werror \
+-fstack-protector-all -D_FORTIFY_SOURCE=2 \
+-ffunction-sections -fdata-sections \
+-fvisibility=hidden -fvisibility-inlines-hidden \
+-Os # or -Oz for tiny
+```
+- assembler
+```
+clang -c --integrated-as \
+    -ffunction-sections -fdata-sections \
+    file.s -o file.o
+```
+- linker
+```
+ ld.lld --icf=safe --gc-sections --print-gc-sections *.o -o executable
 ```
 
-And GLSL compiler for spirv:
+And GLSL compiler for spirv generation:
 ```
 $ glslangValidator --version
 Glslang Version: 10:11.8.0
@@ -116,3 +151,4 @@ ARB_GL_gl_spirv version 100
 	- `sudo perf record -F 99 ./vulkan_test`
 	- `llvm-bolt-15 -data perf.data vulkan_test -o vulkan_test_o2`
 - upx - compress executables, or just zip it have a script that unzips to tmp to execute.
+- `strip`
