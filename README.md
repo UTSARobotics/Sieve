@@ -124,7 +124,7 @@ clang -c --integrated-as \
 ```
 - linker
 ```
- ld.lld --icf=safe --gc-sections --print-gc-sections *.o -o executable
+ld.lld --icf=safe --gc-sections --print-gc-sections *.o -o executable
 ```
 
 And GLSL compiler for spirv generation:
