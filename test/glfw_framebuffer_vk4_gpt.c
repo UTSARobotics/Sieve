@@ -1,4 +1,4 @@
-// clang-15 -O1 -g -o vulkan_test glfw_framebuffer_vk4_gpt.c -L../glfw/build/src -lglfw3 -lvulkan -lm -I. -Wl,--gc-sections  -flto
+// clang-15 -Oz -o vulkan_test glfw_framebuffer_vk4_gpt.c -L../glfw/build/src -lglfw3 -lvulkan -lm -I. -Wl,--gc-sections,--icf=safe  -flto -ffunction-sections -fdata-sections -fuse-ld=lld
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 #include <stdio.h>
