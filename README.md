@@ -68,8 +68,7 @@ some initial dependencies:
 	- libpng
 	- libtiff
 - glfw 3.3
-- vulkan1 1.3.204.1-2 amd64 (tested, use sys. Or Moltenvk.)
-
+- vulkan1 1.3.204.1-2 amd64 (tested, use sys. Or Moltenvk.) - framebuffer
 
 future dependencies under consideration:
 - gstreamer-1 agpl (ipc)
