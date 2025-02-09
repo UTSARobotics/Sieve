@@ -1,67 +1,95 @@
 CC=clang-15
 CXX=clang++-15
-LIBCXXFLAGS=-fstack-protector-all -D_FORTIFY_SOURCE=2 -ffunction-sections -fdata-sections -fvisibility-inlines-hidden -Os
-LIBCFLAGS=-fstack-protector-all -D_FORTIFY_SOURCE=2 -ffunction-sections -fdata-sections -fvisibility-inlines-hidden -Os
-CMAKEOPTS=-DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF -DCMAKE_C_COMPILER=$(CC) -DCMAKE_CXX_COMPILER=$(CXX) -DCMAKE_LINKER=lld
+LIBCFLAGS=-fstack-protector-all -D_FORTIFY_SOURCE=2 -ffunction-sections -fdata-sections -fvisibility-inlines-hidden -O2 -msse4.2 -mavx
+CMAKEOPTS=-DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
+	-DCMAKE_C_COMPILER=$(CC) -DCMAKE_CXX_COMPILER=$(CXX) -DCMAKE_LINKER=lld \
+	-DCMAKE_C_FLAGS="$(LIBCFLAGS)" -DCMAKE_CXX_FLAGS="$(LIBCFLAGS)" \
+	-DCMAKE_C_FLAGS_MINSIZEREL="$(LIBCFLAGS)" -DCMAKE_CXX_FLAGS_MINSIZEREL="$(LIBCFLAGS)"
 VENDOR=$(shell realpath vendor)
+BUILD=$(shell realpath build)
 
 dependencies: build/libheif.a build/libglfw3.a build/libwuffs.a
 
-build/libheif.a: build/libjpeg.a build/libde265.a build/libx265.a
+build/libheif.a: build/libjpeg.a build/libde265.a build/libx265.a \
+		build/libopenjp2.a build/libopenjph.a
 	mkdir -p build
 	mkdir -p vendor/libheif/tmpbuild
 	cd vendor/libheif/tmpbuild && cmake .. $(CMAKEOPTS) \
-	-DCMAKE_CXX_FLAGS="-I$(VENDOR)/libjpeg/tmpbuild -I$(VENDOR)/libx265/tmpbuild -I$(VENDOR)/libde265/tmpbuild ${LIBCXXFLAGS}" \
+	-DCMAKE_CXX_FLAGS="-I $(VENDOR)/openjph/tmpbuild/install/include" \
+	-DENABLE_PLUGIN_LOADING=OFF \
 	-DWITH_JPEG_ENCODER=ON \
 	-DWITH_JPEG_DECODER=ON \
+	-DWITH_OpenJPEG_ENCODER=ON \
+	-DWITH_OpenJPEG_DECODER=ON \
+	-DWITH_OPENJPH_ENCODER=ON \
+	-DWITH_OPENJPH_DECODER=ON \
 	-DHAVE_JPEG_WRITE_ICC_PROFILE=On \
-	-DLIBDE265_INCLUDE_DIR="$(VENDOR)/libde265" \
-	-DLIBDE265_LIBRARY=$(VENDOR)/libde265/tmpbuild/libde265/libde265.a \
-	-DX265_INCLUDE_DIR="$(VENDOR)/libx265/source" \
-	-DX265_LIBRARY=$(VENDOR)/libx265/tmpbuild/libx265.a \
-	-DJPEG_INCLUDE_DIR=$(VENDOR)/libjpeg/src/ \
-	-DJPEG_LIBRARY=$(VENDOR)/libjpeg/tmpbuild/libjpeg.a
+	-DLIBDE265_INCLUDE_DIR="$(VENDOR)/libde265/tmpbuild/install/include" \
+	-DLIBDE265_LIBRARY=$(BUILD)/libde265.a \
+	-DX265_INCLUDE_DIR="$(VENDOR)/libx265/tmpbuild/install/include" \
+	-DX265_LIBRARY=$(BUILD)/libx265.a \
+	-DJPEG_INCLUDE_DIR=$(VENDOR)/libjpeg/tmpbuild/install/include \
+	-DJPEG_LIBRARY=$(BUILD)/libjpeg.a \
+	-DOpenJPEG_INCLUDE_DIR=$(VENDOR)/openjpeg/tmpbuild/install/include \
+	-DOpenJPEG_LIBRARY=$(BUILD)/libopenjp2.a \
+	-DOpenJPEG_DIR=$(VENDOR)/openjpeg/tmpbuild/install/lib/cmake/openjpeg-2.5/ \
+	-DOPENJPH_INCLUDE_DIR==$(VENDOR)/openjph/tmpbuild/install/include \
+	-DOPENJPH_LIBRARY=$(BUILD)/libopenjph.a \
+	-DOPENJPH_DIR=$(VENDOR)/openjph/tmpbuild
 	make -C vendor/libheif/tmpbuild -j$$(( $$(nproc) * 2 ))
 	cp vendor/libheif/tmpbuild/libheif/libheif.a build
 
 build/libde265.a: vendor/libde265/
 	mkdir -p build
-	mkdir -p vendor/libde265/tmpbuild
+	mkdir -p vendor/libde265/tmpbuild/install
 	cd vendor/libde265/tmpbuild && cmake .. $(CMAKEOPTS) \
 		-DENABLE_SDL=OFF \
-		-DCMAKE_CXX_FLAGS="$(LIBCXXFLAGS)" \
-		-DCMAKE_C_FLAGS="$(LIBCFLAGS)"
-	make -C vendor/libde265/tmpbuild -j$$(nproc)
-	cp vendor/libde265/tmpbuild/libde265/libde265.a build
+		-DCMAKE_INSTALL_PREFIX=$(VENDOR)/libde265/tmpbuild/install
+	make -C vendor/libde265/tmpbuild -j$$(nproc) install
+	cp vendor/libde265/tmpbuild/install/lib/libde265.a build
 
 build/libx265.a: vendor/libx265/
 	mkdir -p build
-	mkdir -p vendor/libx265/tmpbuild
+	mkdir -p vendor/libx265/tmpbuild/install
 	cd vendor/libx265/tmpbuild && cmake ../source $(CMAKEOPTS) \
 		-DENABLE_SHARED=OFF \
-		-DCMAKE_CXX_FLAGS="$(LIBCXXFLAGS)" \
-		-DCMAKE_C_FLAGS="$(LIBCFLAGS)"
-	make -C vendor/libx265/tmpbuild -j$$(nproc)
-	cp vendor/libx265/tmpbuild/libx265.a build
+		-DCMAKE_INSTALL_PREFIX=$(VENDOR)/libx265/tmpbuild/install
+	make -C vendor/libx265/tmpbuild -j$$(nproc) install
+	cp vendor/libx265/tmpbuild/install/lib/libx265.a build
 
 build/libjpeg.a: vendor/libjpeg/
 	mkdir -p build
-	mkdir -p vendor/libjpeg/tmpbuild
+	mkdir -p vendor/libjpeg/tmpbuild/install
 	cd vendor/libjpeg/tmpbuild && cmake .. $(CMAKEOPTS) \
-		-DCMAKE_CXX_FLAGS="$(LIBCXXFLAGS)" \
-		-DCMAKE_C_FLAGS="$(LIBCFLAGS)"
-	make -C vendor/libjpeg/tmpbuild -j$$(( $$(nproc) * 2 ))
-	cp vendor/libjpeg/tmpbuild/libjpeg.a build
+		-DCMAKE_INSTALL_PREFIX=$(VENDOR)/libjpeg/tmpbuild/install
+	make -C vendor/libjpeg/tmpbuild -j$$(( $$(nproc) * 2 )) install
+	cp vendor/libjpeg/tmpbuild/install/lib/libjpeg.a build
 
 build/libglfw3.a: vendor/glfw/
 	mkdir -p build
-	mkdir -p vendor/glfw/tmpbuild
+	mkdir -p vendor/glfw/tmpbuild/install
 	cd vendor/glfw/tmpbuild && cmake .. $(CMAKEOPTS) \
-		-DCMAKE_CXX_FLAGS="$(LIBCXXFLAGS)" \
-		-DCMAKE_C_FLAGS="$(LIBCFLAGS)" \
-		-DGLFW_BUILD_EXAMPLES=False -DGLFW_BUILD_TESTS=False -DGLFW_BUILD_DOCS=False
-	make -C vendor/glfw/tmpbuild -j$$(nproc)
-	cp vendor/glfw/tmpbuild/src/libglfw3.a build
+		-DGLFW_BUILD_EXAMPLES=False -DGLFW_BUILD_TESTS=False -DGLFW_BUILD_DOCS=False \
+		-DCMAKE_INSTALL_PREFIX=$(VENDOR)/glfw/tmpbuild/install
+	make -C vendor/glfw/tmpbuild -j$$(nproc) install
+	cp vendor/glfw/tmpbuild/install/lib/libglfw3.a build
+
+build/libopenjp2.a: vendor/openjpeg/
+	mkdir -p build
+	mkdir -p vendor/openjpeg/tmpbuild/install
+	cd vendor/openjpeg/tmpbuild && cmake .. $(CMAKEOPTS) \
+		-DCMAKE_INSTALL_PREFIX=$(VENDOR)/openjpeg/tmpbuild/install
+	make -C vendor/openjpeg/tmpbuild -j$$(nproc) install
+	cp vendor/openjpeg/tmpbuild/install/lib/libopenjp2.a build
+
+build/libopenjph.a: vendor/openjph/
+	mkdir -p build
+	mkdir -p vendor/openjph/tmpbuild/install
+	cd vendor/openjph/tmpbuild && cmake .. $(CMAKEOPTS) \
+		-DCMAKE_INSTALL_PREFIX=$(VENDOR)/openjph/tmpbuild/install
+	make -C vendor/openjph/tmpbuild -j$$(nproc) install
+	cp vendor/openjph/tmpbuild/install/lib/libopenjph.a build
+
 
 build/libwuffs.a: vendor/wuffs/release/c/wuffs-v0.4.c
 	mkdir -p build

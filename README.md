@@ -27,7 +27,7 @@ SMART is the smart way to log data and generate soil microscopy reports.
 - Worldwide soil microscopy database
 
 ## Technical TODO
-- [ ] makefile for project (build dep. static libraries, link hare program)
+- [x] makefile for project (build dep. static libraries, link hare program)
 - [ ] hare tocktick, cross-platform tocktick program counter
 - [ ] hare image opening
 - [ ] hare glfw/vulkan (link to c graphics framebuffer lib)
@@ -151,3 +151,21 @@ ARB_GL_gl_spirv version 100
 	- `llvm-bolt-15 -data perf.data vulkan_test -o vulkan_test_o2`
 - upx - compress executables, or just zip it have a script that unzips to tmp to execute.
 - `strip`
+
+
+## Build settings
+`-Oz`:
+
+    2.3M libde265.a  472K libglfw3.a  6.4M libheif.a  804K libjpeg.a  664K libopenjp2.a  860K libopenjph.a  576K libwuffs.a  2.2M libx265.a  556K wuffs.o
+
+`-Os` in cmake:
+
+    1.8M libde265.a  436K libglfw3.a  4.3M libheif.a  820K libjpeg.a  568K libopenjp2.a  664K libopenjph.a  576K libwuffs.a  2.2M libx265.a  556K wuffs.o
+
+`-O2 -mavx -msse4.2`:
+
+    2.0M libde265.a   496K libglfw3.a   4.4M libheif.a  1016K libjpeg.a   756K libopenjp2.a   880K libopenjph.a   652K libwuffs.a   2.7M libx265.a   632K wuffs.o
+
+`-Os -mavx -msse4.2`:
+
+    1.9M libde265.a  472K libglfw3.a  4.3M libheif.a  828K libjpeg.a  676K libopenjp2.a  844K libopenjph.a  568K libwuffs.a  2.2M libx265.a  548K wuffs.o
