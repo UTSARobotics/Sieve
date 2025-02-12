@@ -8,6 +8,20 @@ CMAKEOPTS=-DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=
 VENDOR=$(shell realpath vendor)
 BUILD=$(shell realpath build)
 
+all: $(BUILD)/bin/hello $(BUILD)/bin/labeler
+
+$(BUILD)/bin/hello: dependencies
+	mkdir -p $(BUILD)/bin
+	LDLINKFLAGS="--icf=safe --gc-sections --print-gc-sections --strip-all" \
+		hare build -R -o $@ cmd/hello
+
+$(BUILD)/bin/labeler: dependencies
+	mkdir -p $(BUILD)/bin
+	LDLINKFLAGS="--icf=safe --gc-sections --print-gc-sections --strip-all" \
+		hare build -L $(BUILD) -lwuffs -lglfw3 -lheif -R -o $@ cmd/labeler
+
+# TODO place everything in build/lib
+
 dependencies: build/libheif.a build/libglfw3.a build/libwuffs.a
 
 build/libheif.a: build/libjpeg.a build/libde265.a build/libx265.a \
