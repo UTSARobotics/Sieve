@@ -1,4 +1,4 @@
-// clang-15 -Oz -o simple_test glfw_framebuffer_simple.c -L../build -I../vendor/glfw/include -lglfw3 -lm -lGLESv2 -lX11 -I. -Wl,--gc-sections,icf=all,--strip-all -flto
+// clang-15 -O2 -o simple_test glfw_framebuffer_simple.c -L../build -I../vendor/glfw/include -lglfw3 -lm -lGLESv2 -lX11 -I. -Wl,--gc-sections,--icf=all,--strip-all -fuse-ld=lld -flto
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -61,6 +61,11 @@ void mouse_callback(GLFWwindow* window, int button, int action, int mods) {
 	}
 }
 
+static void cursor_position_callback(GLFWwindow* window, double xpos, double ypos)
+{
+	printf("Cursor moved to (%f, %f)\n", xpos, ypos);
+}
+
 void key_callback(GLFWwindow* window, int key, int scancode, int action, int mods)
 {
 	if (key == GLFW_KEY_BACKSPACE) {
@@ -76,6 +81,13 @@ void key_callback(GLFWwindow* window, int key, int scancode, int action, int mod
 	if (key == GLFW_KEY_Z && (mods & GLFW_MOD_CONTROL) && !(mods & GLFW_MOD_SHIFT) && (action == GLFW_PRESS)) {
 		printf("UNDO PRESSED\n");
 	}
+}
+
+void scroll_callback(GLFWwindow* window, double xoffset, double yoffset)
+{
+	// A normal mouse wheel, being vertical, provides offsets along the Y-axis.
+	// todo exponential to max speed, looking at since last scroll?
+	printf("scroll %f\n", yoffset);
 }
 
 // This callback is called whenever the framebuffer is resized.
@@ -111,7 +123,9 @@ void init() {
 
 	// gui io
 	glfwSetMouseButtonCallback(window, mouse_callback);
+	glfwSetCursorPosCallback(window, cursor_position_callback);
 	glfwSetKeyCallback(window, key_callback);
+	glfwSetScrollCallback(window, scroll_callback);
 
 	// Allocate pixel buffer for the texture dimensions.
 	pixels = (unsigned char*)malloc(MAX_RENDER * MAX_RENDER * 3);
