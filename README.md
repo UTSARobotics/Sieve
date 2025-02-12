@@ -30,6 +30,9 @@ SMART is the smart way to log data and generate soil microscopy reports.
 - [x] makefile for project (build dep. static libraries, link hare program)
 - [ ] hare tocktick, cross-platform tocktick program counter
 - [ ] hare image opening
+- [ ] vacui opengl (for macos/desktop linux/wsl2)
+- [ ] vacui opengles
+- [ ] Test different image compression
 - [ ] hare glfw/vulkan (link to c graphics framebuffer lib)
 - [ ] hex array header gen for the fragment/vertex spirv (write hare program for this)
 - [ ] display image
@@ -40,8 +43,11 @@ SMART is the smart way to log data and generate soil microscopy reports.
 - [ ] navigation
 - [ ] save line data files as wxf
 - [ ] AVX on x86, neon on arm
-- [ ] hare warren (ravenring)
+- [ ] hare warren (ravenring) ipc and launch (spawn?) system, C, Python, R bindings
 - [ ] breed metacompiler for windows C gen from hare.
+
+Note:
+- This repository has amassed considerable bloat. Consider removing everything but wuffs and libheif with j2k-ht support. (".j2ki", apparently). If it's good enough for the NSA... Write a benchmark program that tests the compression and file size of each format if you really want to be sure.
 
 ## Dependencies
 This program vendors dependencies, or includes a copy of the dependency used in building. This is done for reliability and stability reasons, and partially for performance. It also discourages the proliferation of complex dependencies.

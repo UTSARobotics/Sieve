@@ -11,10 +11,10 @@ BUILD=$(shell realpath build)
 dependencies: build/libheif.a build/libglfw3.a build/libwuffs.a
 
 build/libheif.a: build/libjpeg.a build/libde265.a build/libx265.a \
-		build/libopenjp2.a build/libopenjph.a
+		build/libopenjp2.a build/libopenjph.a build/libaom.a
 	mkdir -p build
 	mkdir -p vendor/libheif/tmpbuild
-	cd vendor/libheif/tmpbuild && cmake .. $(CMAKEOPTS) \
+	cmake -S vendor/libheif -B vendor/libheif/tmpbuild $(CMAKEOPTS) \
 	-DCMAKE_CXX_FLAGS="-I $(VENDOR)/openjph/tmpbuild/install/include" \
 	-DENABLE_PLUGIN_LOADING=OFF \
 	-DWITH_JPEG_ENCODER=ON \
@@ -23,7 +23,9 @@ build/libheif.a: build/libjpeg.a build/libde265.a build/libx265.a \
 	-DWITH_OpenJPEG_DECODER=ON \
 	-DWITH_OPENJPH_ENCODER=ON \
 	-DWITH_OPENJPH_DECODER=ON \
-	-DHAVE_JPEG_WRITE_ICC_PROFILE=On \
+	-DWITH_AOM_ENCODER=ON \
+	-DWITH_AOM_DECODER=ON \
+	-DHAVE_JPEG_WRITE_ICC_PROFILE=ON \
 	-DLIBDE265_INCLUDE_DIR="$(VENDOR)/libde265/tmpbuild/install/include" \
 	-DLIBDE265_LIBRARY=$(BUILD)/libde265.a \
 	-DX265_INCLUDE_DIR="$(VENDOR)/libx265/tmpbuild/install/include" \
@@ -35,7 +37,9 @@ build/libheif.a: build/libjpeg.a build/libde265.a build/libx265.a \
 	-DOpenJPEG_DIR=$(VENDOR)/openjpeg/tmpbuild/install/lib/cmake/openjpeg-2.5/ \
 	-DOPENJPH_INCLUDE_DIR==$(VENDOR)/openjph/tmpbuild/install/include \
 	-DOPENJPH_LIBRARY=$(BUILD)/libopenjph.a \
-	-DOPENJPH_DIR=$(VENDOR)/openjph/tmpbuild
+	-DOPENJPH_DIR=$(VENDOR)/openjph/tmpbuild \
+	-DAOM_INCLUDE_DIR=$(VENDOR)/aom/tmpbuild/install/include \
+	-DAOM_LIBRARY=$(BUILD)/libaom.a
 	make -C vendor/libheif/tmpbuild -j$$(( $$(nproc) * 2 ))
 	cp vendor/libheif/tmpbuild/libheif/libheif.a build
 
@@ -56,6 +60,14 @@ build/libx265.a: vendor/libx265/
 		-DCMAKE_INSTALL_PREFIX=$(VENDOR)/libx265/tmpbuild/install
 	make -C vendor/libx265/tmpbuild -j$$(nproc) install
 	cp vendor/libx265/tmpbuild/install/lib/libx265.a build
+
+build/libaom.a: vendor/aom/
+	mkdir -p build
+	cmake -S vendor/aom -B vendor/aom/tmpbuild  \
+		-DENABLE_DOCS=0 -DENABLE_EXAMPLES=0 -DENABLE_TESTDATA=0 -DENABLE_TESTS=0 -DENABLE_TOOLS=0 \
+		-DCMAKE_INSTALL_PREFIX=$(VENDOR)/aom/tmpbuild/install
+	make -C vendor/aom/tmpbuild -j$$(( $$(nproc) * 2 )) install
+	cp vendor/aom/tmpbuild/install/lib/libaom.a build
 
 build/libjpeg.a: vendor/libjpeg/
 	mkdir -p build

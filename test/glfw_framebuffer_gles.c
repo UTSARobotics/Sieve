@@ -1,11 +1,11 @@
-// clang-15 -O3 -o gles_test glfw_framebuffer_gles.c -L../glfw/build/src -lglfw3 -lm -lGLESv2 -lEGL -I. -Wl,--gc-sections -flto
+// clang-15 -O3 -o gles_test glfw_framebuffer_gles.c -L../build -I../vendor/glfw/include -lglfw3 -lm -lGLESv2 -lX11 -I. -Wl,--gc-sections -flto
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #include <GLES2/gl2.h>
 #include <GLFW/glfw3.h>
 
-int WIDTH = 640, HEIGHT = 480;
+int WIDTH = 4096, HEIGHT = 4096;
 #define MIN_WINDOW_WIDTH 480
 #define MIN_WINDOW_HEIGHT 360
 
