@@ -128,7 +128,7 @@ void init() {
 	glfwSetScrollCallback(window, scroll_callback);
 
 	// Allocate pixel buffer for the texture dimensions.
-	pixels = (unsigned char*)malloc(MAX_RENDER * MAX_RENDER * 3);
+	pixels = (unsigned char*)malloc(MAX_RENDER * MAX_RENDER * 4);
 	// seed rng
 	srand(time(0));
 
@@ -152,7 +152,7 @@ void init() {
 	glUseProgram(program);
 
 	// Create a VBO with interleaved position and texture coordinates.
-	// We use a triangle strip for the full-screen quad.
+	// We use a triangle that spans the entire screen
 	float vertices[] = {
 		// Position    // Tex Coords
 		-1.0f, -1.0f,  0.0f, 0.0f, // bottom left
@@ -179,32 +179,33 @@ void init() {
 
 
 	// do not initialize storage
-	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, RENDER_W, RENDER_H, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-	glActiveTexture(GL_TEXTURE0);
+	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, RENDER_W, RENDER_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+	// glActiveTexture(GL_TEXTURE0); // implied/default texture unit
 
-	GLint texUniform = glGetUniformLocation(program, "u_texture");
-	glUniform1i(texUniform, 0);
+	// implied/assumed.
+	// GLint texUniform = glGetUniformLocation(program, "u_texture");
+	// glUniform1i(texUniform, 0);
 }
 
-void draw(unsigned char* pixels_rgb) {
+void draw(unsigned char* pixels_rgba) {
 	/// 1. Resize if needed.
 	// if resize, make new texture
 	if (RENDER_H != PREV_RENDER_H || RENDER_W != PREV_RENDER_W) {
 		// Reinitialize the texture storage to the new dimensions.
-		glBindTexture(GL_TEXTURE_2D, texture);
+		// glBindTexture(GL_TEXTURE_2D, texture);
 		// Passing NULL as data to allocate storage without initializing it.
-		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, RENDER_W, RENDER_H, 0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
-		// // Reinitialize the viewport.
-		// glViewport(0, 0, WIDTH, HEIGHT);
+		// re-use existing texture.
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, RENDER_W, RENDER_H, 0, GL_RGBA, GL_UNSIGNED_BYTE, NULL);
+		// Reinitialize the viewport.
+		glViewport(0, 0, WIDTH, HEIGHT);
 		PREV_RENDER_H = RENDER_H;
 		PREV_RENDER_W = RENDER_W;
-		glViewport(0, 0, WIDTH, HEIGHT);
 	}
 
 	/// 2. Update Pixels
 	// glBindTexture(GL_TEXTURE_2D, texture);
 	// Update the texture with the new data.
-	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RENDER_W, RENDER_H, GL_RGB, GL_UNSIGNED_BYTE, pixels_rgb);
+	glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, RENDER_W, RENDER_H, GL_RGBA, GL_UNSIGNED_BYTE, pixels_rgba);
 
 	/// 3. Display
 	// glClear(GL_COLOR_BUFFER_BIT);
@@ -224,21 +225,25 @@ int main() {
 		// Generate new random noise in the pixel buffer.
 		for (int i = 0; i < RENDER_W * RENDER_H; i+=4) {
 			int r = rand();
-			pixels[i * 3 + 0] = r & 255;
-			pixels[i * 3 + 1] = (r * r) & 255;
-			pixels[i * 3 + 2] = (r + 17) & 255;
+			pixels[i * 4 + 0] = r & 255;
+			pixels[i * 4 + 1] = (r * r) & 255;
+			pixels[i * 4 + 2] = (r + 17) & 255;
+			pixels[i * 4 + 3] = 255;
 			r = r >> 7;
-			pixels[(i+1) * 3 + 0] = r & 255;
-			pixels[(i+1) * 3 + 1] = (r * r) & 255;
-			pixels[(i+1) * 3 + 2] = (r + 17) & 255;
+			pixels[(i+1) * 4 + 0] = r & 255;
+			pixels[(i+1) * 4 + 1] = (r * r) & 255;
+			pixels[(i+1) * 4 + 2] = (r + 17) & 255;
+			pixels[(i+1) * 4 + 3] = 255;
 			r = r >> 7;
-			pixels[(i+2) * 3 + 0] = r & 255;
-			pixels[(i+2) * 3 + 1] = (r * r) & 255;
-			pixels[(i+2) * 3 + 2] = (r + 17) & 255;
+			pixels[(i+2) * 4 + 0] = r & 255;
+			pixels[(i+2) * 4 + 1] = (r * r) & 255;
+			pixels[(i+2) * 4 + 2] = (r + 17) & 255;
+			pixels[(i+2) * 4 + 3] = 255;
 			r = r >> 7;
-			pixels[(i+3) * 3 + 0] = r & 255;
-			pixels[(i+3) * 3 + 1] = (r * r) & 255;
-			pixels[(i+3) * 3 + 2] = (r + 17) & 255;
+			pixels[(i+3) * 4 + 0] = r & 255;
+			pixels[(i+3) * 4 + 1] = (r * r) & 255;
+			pixels[(i+3) * 4 + 2] = (r + 17) & 255;
+			pixels[(i+3) * 4 + 3] = 255;
 		}
 		draw(pixels);
 		glfwPollEvents();
