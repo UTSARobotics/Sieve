@@ -1,0 +1,13 @@
+VacUI
+
+Stands for Vacule UI; It is a simple framebuffer UI system for
+displaying pixels on the screen using OpenGL or OpenGL-ES.
+
+It is named after the concept of a vacule, as the data is just shipped out
+of your application and displayed on the screen.
+
+The biology metaphor, I admit, is kinda stretched. Oh well.
+
+It works on desktop or embedded, using C ABI functionality.
+
+`hare build -lglfw3 -lGL -T+GL` or `hare build -lglfw3 -lGLESv2 -T+GLES`
