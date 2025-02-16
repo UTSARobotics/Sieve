@@ -1,0 +1,7 @@
+Hare Chronograph
+
+This module contains code for counting nanoseconds.
+
+Note: this library is optimized for accumulating small times.
+(integer accumulation is fast and accurate)
+

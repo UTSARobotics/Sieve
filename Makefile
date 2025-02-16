@@ -1,5 +1,6 @@
 CC=clang-15
 CXX=clang++-15
+LD=ld.lld-15
 LIBCFLAGS=-fstack-protector-all -D_FORTIFY_SOURCE=2 -ffunction-sections -fdata-sections -fvisibility-inlines-hidden -O2 -msse4.2 -mavx
 CMAKEOPTS=-DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
 	-DCMAKE_C_COMPILER=$(CC) -DCMAKE_CXX_COMPILER=$(CXX) -DCMAKE_LINKER=lld \
@@ -7,22 +8,21 @@ CMAKEOPTS=-DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=
 	-DCMAKE_C_FLAGS_MINSIZEREL="$(LIBCFLAGS)" -DCMAKE_CXX_FLAGS_MINSIZEREL="$(LIBCFLAGS)"
 VENDOR=$(shell realpath vendor)
 BUILD=$(shell realpath build)
+HAREPATH=/usr/local/src/hare/stdlib/:$(shell realpath internal)
 
 all: $(BUILD)/bin/hello $(BUILD)/bin/labeler
 
-$(BUILD)/bin/hello: dependencies
+$(BUILD)/bin/hello:
 	mkdir -p $(BUILD)/bin
-	LDLINKFLAGS="--icf=safe --gc-sections --print-gc-sections --strip-all" \
+	HAREPATH=$(HAREPATH) LD=$(LD) LDLINKFLAGS="--icf=safe --gc-sections --print-gc-sections --strip-all" \
 		hare build -R -o $@ cmd/hello
 
-$(BUILD)/bin/labeler: dependencies
+$(BUILD)/bin/labeler: build/libheif.a build/libglfw3.a build/libwuffs.a
 	mkdir -p $(BUILD)/bin
-	LDLINKFLAGS="--icf=safe --gc-sections --print-gc-sections --strip-all" \
-		hare build -L $(BUILD) -lwuffs -lglfw3 -lheif -R -o $@ cmd/labeler
+	HAREPATH=$(HAREPATH) LD=$(LD) LDLINKFLAGS="--icf=safe --gc-sections --print-gc-sections --strip-all" \
+		hare build -L $(BUILD) -lwuffs -lheif -lglfw3 -R -o $@ cmd/labeler
 
 # TODO place everything in build/lib
-
-dependencies: build/libheif.a build/libglfw3.a build/libwuffs.a
 
 build/libheif.a: build/libjpeg.a build/libde265.a build/libx265.a \
 		build/libopenjp2.a build/libopenjph.a build/libaom.a
@@ -143,9 +143,9 @@ build/libwuffs.a: vendor/wuffs/release/c/wuffs-v0.4.c
 	-DWUFFS_CONFIG__DST_PIXEL_FORMAT__ENABLE_ALLOWLIST \
 	-DWUFFS_CONFIG__DST_PIXEL_FORMAT__ALLOW_Y \
 	-DWUFFS_CONFIG__DST_PIXEL_FORMAT__ALLOW_RGB \
-	-DWUFFS_CONFIG__DST_PIXEL_FORMAT__ALLOW_RGBA_NONPREMUL \
 	-DWUFFS_CONFIG__ENABLE_DROP_IN_REPLACEMENT__STB \
 	-DSTBI_NO_STDIO
+# 	-DWUFFS_CONFIG__DST_PIXEL_FORMAT__ALLOW_RGBA_NONPREMUL # ?
 	ar rcs build/libwuffs.a build/wuffs.o
 
 clean: 
