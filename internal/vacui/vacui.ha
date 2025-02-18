@@ -2,7 +2,7 @@ use types::c;
 use fmt;
 
 // Must be even power of two
-export def EVENT_BUFFER_LENGTH:size = 1024;
+export def EVENT_BUFFER_LENGTH:size = 512;
 
 export type uieventbuffer = struct {
 	index: size,
@@ -50,8 +50,7 @@ let UI:ui = ui {
 // Initialize a framebuffer window for display
 // `name` is the display name for the window
 // `width` and `height` determine the initial, minimum window dimensions
-// `max` determines the maximum number of pixels for rendering
-// `resizable` determines whether the window can be resized
+// `max_size` determines the maximum number of pixels (w/h) for rendering
 export fn init(
 	name: str,
 	width: int,
@@ -65,7 +64,7 @@ export fn init(
 	init_glfw_backend(); // GL/GLES-specific init
 
 	glfwWindowHint(GLFW_RESIZABLE, 1);
-
+	assert(glfwGetError(null)==0);
 	let name_buf:[64]c::char = [0...];
 	let cname = c::fromstr_buf(name, name_buf);
 	let window: *opaque = glfwCreateWindow(width, height, cname,
@@ -75,6 +74,7 @@ export fn init(
 	};
 
 	glfwMakeContextCurrent(window);
+	assert(glfwGetError(null)==0);
 
 	// set size limits to initial and unbounded
 	glfwSetWindowSizeLimits(window, width, height, -1, -1);
@@ -113,7 +113,7 @@ export fn init(
 	let gl_buf: int = 0;
 	glGenBuffers(1, &gl_buf);
 	glBindBuffer(GL_ARRAY_BUFFER, gl_buf);
-	glBufferData(GL_ARRAY_BUFFER, len(vertices):int, &vertices[0],
+	glBufferData(GL_ARRAY_BUFFER, (len(vertices)*size(f32)):int, &vertices[0],
 		GL_STATIC_DRAW);
 
 	// Set attribute locations in buffer
@@ -126,21 +126,17 @@ export fn init(
 	glVertexAttribPointer(pos_attribute, 2, GL_FLOAT, 0,
 		4 * size(f32):int, 0);
 	glVertexAttribPointer(tex_attribute, 2, GL_FLOAT, 0,
-		4 * size(f32):int, 2*size(f32):int);
+		4 * size(f32):int, 2*size(f32):i64);  // Use i64 for the offset
 
 	// 4. Set up framebuffer
 	const (draw_width, draw_height) = windowsize(width, height, max_size);
 	let gl_texture: int = 0;
 	glGenTextures(1, &gl_texture);
 	glBindTexture(GL_TEXTURE_2D, gl_texture);
-	// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
-	// glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
-	// glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, draw_width, draw_height, 0,
-	// 	GL_RGBA, GL_UNSIGNED_BYTE, null);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
 	glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
 	glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, draw_width, draw_height, 0,
-	    GL_RGBA, GL_UNSIGNED_BYTE, null);
+		GL_RGBA, GL_UNSIGNED_BYTE, null);
 
 	UI.draw_width = draw_width;
 	UI.draw_height = draw_height;
@@ -150,6 +146,7 @@ export fn init(
 	UI.gl_vertex_buffer = gl_buf;
 	UI.gl_texture = gl_texture;
 	UI.gles_window = window;
+	assert(glfwGetError(null)==0);
 };
 
 // Draw pixel buffer on the screen
@@ -167,7 +164,6 @@ export fn draw(rgba_pixels:[]u8) ( wrongsize | void ) = {
 			null);
 		// Update viewport size
 		glViewport(0, 0, UI.window_width, UI.window_height);
-
 		UI.resize = false;
 	};
 

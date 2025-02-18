@@ -10,7 +10,7 @@ VENDOR=$(shell realpath vendor)
 BUILD=$(shell realpath build)
 HAREPATH=/usr/local/src/hare/stdlib/:internal
 
-all: $(BUILD)/bin/hello $(BUILD)/bin/labeler
+all: $(BUILD)/bin/hello $(BUILD)/bin/labeler $(BUILD)/bin/colors
 
 $(BUILD)/bin/hello:
 	mkdir -p $(BUILD)/bin
@@ -19,9 +19,12 @@ $(BUILD)/bin/hello:
 
 $(BUILD)/bin/labeler: build/libheif.a build/libglfw3.a build/libwuffs.a internal/hac
 	mkdir -p $(BUILD)/bin
-# 	HAREPATH=$(HAREPATH) LD=$(LD) LDLINKFLAGS="--icf=safe --gc-sections --print-gc-sections --strip-all" \
-# 		hare build -L $(BUILD) -lwuffs -lheif -lglfw3 -lX11 -lGL -lm -T+GL -R -o $@ cmd/labeler
-	HAREPATH=$(HAREPATH) LD=ld hare build -L $(BUILD) -lwuffs -lheif -lglfw3 -lX11 -lGL -lm -lc -T+GL -o $@ cmd/labeler
+	HAREPATH=$(HAREPATH) LD=$(LD) LDLINKFLAGS="--icf=safe --gc-sections --print-gc-sections --strip-all" \
+		hare build -L $(BUILD) -lwuffs -lheif -lglfw3 -lX11 -lGL -lm -T+GL -R -o $@ cmd/labeler
+
+$(BUILD)/bin/colors: build/libheif.a build/libglfw3.a build/libwuffs.a internal/hac
+	HAREPATH=$(HAREPATH) LD=$(LD) LDLINKFLAGS="--icf=safe --gc-sections --print-gc-sections --strip-all" \
+		hare build -L $(BUILD) -lglfw3 -lX11 -lGLESv2 -lm -T+GLES -R -o $@ cmd/colors
 
 # TODO place everything in build/lib
 

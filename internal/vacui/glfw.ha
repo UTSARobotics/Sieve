@@ -59,6 +59,8 @@ export @symbol("glfwWindowShouldClose") fn glfwWindowShouldClose(
 	window: nullable *opaque
 ) int;
 
+export @symbol("glfwGetError") fn glfwGetError(description: nullable **c::char) int;
+
 // Callbacks
 
 export @symbol("glfwSetFramebufferSizeCallback")

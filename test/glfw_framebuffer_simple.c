@@ -99,7 +99,7 @@ void framebuffer_size_callback(GLFWwindow* window, int width, int height) {
 }
 
 void init() {
-	if (!glfwInit()) {
+	if (glfwInit() == 0) {
 		fprintf(stderr, "Failed to initialize GLFW\n");
 		exit(EXIT_FAILURE);
 	}
@@ -187,7 +187,7 @@ void init() {
 	// glUniform1i(texUniform, 0);
 }
 
-void draw(unsigned char* pixels_rgba) {
+void draw(unsigned char* pixels_rgba, void* window) {
 	/// 1. Resize if needed.
 	// if resize, make new texture
 	if (RENDER_H != PREV_RENDER_H || RENDER_W != PREV_RENDER_W) {
@@ -212,7 +212,7 @@ void draw(unsigned char* pixels_rgba) {
 	// glActiveTexture(GL_TEXTURE0);
 	// glBindTexture(GL_TEXTURE_2D, texture);
 	glDrawArrays(GL_TRIANGLES, 0, 3);
-	glfwSwapBuffers(glfwGetCurrentContext());
+	glfwSwapBuffers(window);
 }
 
 
@@ -245,7 +245,7 @@ int main() {
 			pixels[(i+3) * 4 + 2] = (r + 17) & 255;
 			pixels[(i+3) * 4 + 3] = 255;
 		}
-		draw(pixels);
+		draw(pixels, window);
 		glfwPollEvents();
 		i += 1;
 		printf("i=%d\n", i);  // 30 fps small
