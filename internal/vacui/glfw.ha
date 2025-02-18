@@ -1,24 +1,24 @@
 use types::c;
 
 // Common numbers
-export def GLFW_CLIENT_API:i64 = 0x00022001;
-export def GLFW_OPENGL_ES_API:i64 = 0x00030002;
-export def GLFW_OPENGL_API:i64 = 0x00030001; // Default
-export def GLFW_CONTEXT_VERSION_MAJOR:i64 = 0x00022002;
-export def GLFW_CONTEXT_VERSION_MINOR:i64 = 0x00022003;
-export def GLFW_RESIZABLE:i64 = 0x00020003;
+export def GLFW_CLIENT_API:int = 0x00022001;
+export def GLFW_OPENGL_ES_API:int = 0x00030002;
+export def GLFW_OPENGL_API:int = 0x00030001; // Default
+export def GLFW_CONTEXT_VERSION_MAJOR:int = 0x00022002;
+export def GLFW_CONTEXT_VERSION_MINOR:int = 0x00022003;
+export def GLFW_RESIZABLE:int = 0x00020003;
 
 // Cursor settings
-export def GLFW_CURSOR:i64 = 0x00033001;
-export def GLFW_CURSOR_NORMAL:i64 = 0x00034001;
-export def GLFW_CURSOR_HIDDEN:i64 = 0x00034002;
-export def GLFW_CURSOR_DISABLED:i64 = 0x00034003;
+export def GLFW_CURSOR:int = 0x00033001;
+export def GLFW_CURSOR_NORMAL:int = 0x00034001;
+export def GLFW_CURSOR_HIDDEN:int = 0x00034002;
+export def GLFW_CURSOR_DISABLED:int = 0x00034003;
 
 // Setup
 export @symbol("glfwInit") fn glfwInit() int;
 
 export @symbol("glfwWindowHint")
-fn glfwWindowHint(parameter: i64, value: i64) void;
+fn glfwWindowHint(parameter: int, value: int) void;
 
 export @symbol("glfwSetWindowSizeLimits")
 fn glfwSetWindowSizeLimits(window: *opaque, width: int, height: int,
@@ -51,7 +51,7 @@ export @symbol("glfwGetCurrentContext") fn glfwGetCurrentContext() *opaque;
 // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_HIDDEN);
 // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
 export @symbol("glfwSetInputMode")
-fn glfwSetInputMode(window: *opaque, input: i64, mode: i64) void;
+fn glfwSetInputMode(window: *opaque, input: int, mode: int) void;
 
 export @symbol("glfwPollEvents") fn glfwPollEvents() void;
 
