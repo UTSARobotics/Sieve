@@ -9,7 +9,7 @@ export fn ns(start: u64) i64 = {
 	return nsdt(stop, start);
 };
 
-// Calculate the nanoseconds between the stop and the start count
+// Calculate the nanoseconds delta between the stop and the start count
 export fn nsdt(stop:u64, start: u64) i64 = {
 	static let NS_PER_COUNT:f32 = -2.0;
 	if (NS_PER_COUNT < 0f32) {

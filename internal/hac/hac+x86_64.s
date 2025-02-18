@@ -6,7 +6,6 @@
 /* x86_64 version */
 
 hac.count:
-haccount:
 	/* RDTSC loads upper 32 bits into RDX and lower into RAX */
 	/* lfence                  /* (DISABLED) Prevent execution reordering */
 	xorq %rax, %rax

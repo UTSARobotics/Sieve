@@ -8,7 +8,7 @@ CMAKEOPTS=-DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=
 	-DCMAKE_C_FLAGS_MINSIZEREL="$(LIBCFLAGS)" -DCMAKE_CXX_FLAGS_MINSIZEREL="$(LIBCFLAGS)"
 VENDOR=$(shell realpath vendor)
 BUILD=$(shell realpath build)
-HAREPATH=/usr/local/src/hare/stdlib/:$(shell realpath internal)
+HAREPATH=/usr/local/src/hare/stdlib/:internal
 
 all: $(BUILD)/bin/hello $(BUILD)/bin/labeler
 
@@ -17,10 +17,11 @@ $(BUILD)/bin/hello:
 	HAREPATH=$(HAREPATH) LD=$(LD) LDLINKFLAGS="--icf=safe --gc-sections --print-gc-sections --strip-all" \
 		hare build -R -o $@ cmd/hello
 
-$(BUILD)/bin/labeler: build/libheif.a build/libglfw3.a build/libwuffs.a
+$(BUILD)/bin/labeler: build/libheif.a build/libglfw3.a build/libwuffs.a internal/hac
 	mkdir -p $(BUILD)/bin
-	HAREPATH=$(HAREPATH) LD=$(LD) LDLINKFLAGS="--icf=safe --gc-sections --print-gc-sections --strip-all" \
-		hare build -L $(BUILD) -lwuffs -lheif -lglfw3 -R -o $@ cmd/labeler
+# 	HAREPATH=$(HAREPATH) LD=$(LD) LDLINKFLAGS="--icf=safe --gc-sections --print-gc-sections --strip-all" \
+# 		hare build -L $(BUILD) -lwuffs -lheif -lglfw3 -lX11 -lGL -lm -T+GL -R -o $@ cmd/labeler
+	HAREPATH=$(HAREPATH) LD=ld hare build -L $(BUILD) -lwuffs -lheif -lglfw3 -lX11 -lGL -lm -lc -T+GL -o $@ cmd/labeler
 
 # TODO place everything in build/lib
 
@@ -143,9 +144,9 @@ build/libwuffs.a: vendor/wuffs/release/c/wuffs-v0.4.c
 	-DWUFFS_CONFIG__DST_PIXEL_FORMAT__ENABLE_ALLOWLIST \
 	-DWUFFS_CONFIG__DST_PIXEL_FORMAT__ALLOW_Y \
 	-DWUFFS_CONFIG__DST_PIXEL_FORMAT__ALLOW_RGB \
+	-DWUFFS_CONFIG__DST_PIXEL_FORMAT__ALLOW_RGBA_NONPREMUL \
 	-DWUFFS_CONFIG__ENABLE_DROP_IN_REPLACEMENT__STB \
 	-DSTBI_NO_STDIO
-# 	-DWUFFS_CONFIG__DST_PIXEL_FORMAT__ALLOW_RGBA_NONPREMUL # ?
 	ar rcs build/libwuffs.a build/wuffs.o
 
 clean: 

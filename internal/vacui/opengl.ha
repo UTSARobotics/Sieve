@@ -1,4 +1,4 @@
-use types::C;
+use types::c;
 
 // shader types
 def GL_VERTEX_SHADER:int = 0x8B31;
@@ -24,45 +24,37 @@ def GL_TRIANGLES:int = 0x0004;
 
 // Shaders
 
-export @symbol("glCreateShader")
-fn glCreateShader(shader_type: int) uint;
+export @symbol("glCreateShader") fn glCreateShader(shader_type: int) int;
 
-export @symbol("glShaderSource")
-fn glShaderSource(
-	shader: uint,
+export @symbol("glShaderSource") fn glShaderSource(
+	shader: int,
 	count: int,
 	shader_sources: **c::char,
-	source_lengths: *int // NULL for null-terminated.
+	source_lengths: nullable *int // NULL for null-terminated.
 ) void;
 
-export @symbol("glCompileShader")
-fn glCompileShader(shader: uint)
+export @symbol("glCompileShader") fn glCompileShader(shader: int) void;
 
-export @symbol("glCreateProgram")
-fn glCompileShader() uint;
+export @symbol("glAttachShader") fn glAttachShader(
+	program: int,
+	shader: int
+) int;
 
-export @symbol("glAttachShader")
-fn glAttachShader(
-	program: uint,
-	shader: uint
-) uint;
+export @symbol("glCreateProgram") fn glCreateProgram() int;
 
-export @symbol("glLinkProgram")
-fn glLinkProgram(program: uint) void;
+export @symbol("glLinkProgram") fn glLinkProgram(program: int) void;
 
-export @sumbol("glUseProgram")
-fn glUseProgram(program:uint) void;
+export @symbol("glUseProgram") fn glUseProgram(program: int) void;
 
 // Vertex
 
-export @sumbol("glGenBuffers")
-fn glGenBuffers(count: int, buf_refs *uint) void;
+export @symbol("glGenBuffers")
+fn glGenBuffers(count: int, buf_refs: *int) void;
 
-export @sumbol("glBindBuffer")
-fn glBindBuffer(buf_type: int, buf_ref: uint) void;
+export @symbol("glBindBuffer")
+fn glBindBuffer(buf_type: int, buf_ref: int) void;
 
-export @sumbol("glBufferData")
-fn glBufferData(
+export @symbol("glBufferData") fn glBufferData(
 	buf_type: int,
 	data_size: int,
 	vertices: *f32,
@@ -70,37 +62,35 @@ fn glBufferData(
 ) void;
 
 // set position information
-export @sumbol("glGetAttribLocation")
-fn glGetAttribLocation(program: uint, name: *c::char) int;
+export @symbol("glGetAttribLocation")
+fn glGetAttribLocation(program: int, name: *c::char) int;
 
-export @sumbol("glEnableVertexAttribArray")
-fn glEnableVertexAttribArray(int attr_location) void;
+export @symbol("glEnableVertexAttribArray")
+fn glEnableVertexAttribArray(attr_location: int) void;
 
-export @sumbol("glVertexAttribPointer")
-fn glVertexAttribPointer(
-	int attr_location,
-	int num_elements,
-	int data_type,
-	int normalize,
-	int stride,
-	int start_offset
+export @symbol("glVertexAttribPointer") fn glVertexAttribPointer(
+	attr_location: int,
+	num_elements: int,
+	data_type: int,
+	normalize: int,
+	stride: int,
+	start_offset: i64
 ) void;
 
 // Texture
 
 export @symbol("glGenTextures")
-fn glGenTextures(count: int, texture_refs: *uint) void;
+fn glGenTextures(count: int, texture_refs: *int) void;
 
 export @symbol("glBindTexture")
-fn glBindTexture(tex_type: int, texture_ref: uint) void;
+fn glBindTexture(tex_type: int, texture_ref: int) void;
 
 export @symbol("glTexParameteri")
 fn glTexParameteri(tex_type: int, filter_type:int, interpolation:int) void;
 
 // Set the size for a GL Texture, optionally providing initial data
 // color_format, use GL_RGBA. initial_data: can be null for uninitialized.
-export @symbol("glTexImage2D")
-fn glTexImage2D(
+export @symbol("glTexImage2D") fn glTexImage2D(
 	tex_type: int,
 	mip_level: int,
 	color_format_internal: int,
@@ -113,8 +103,7 @@ fn glTexImage2D(
 ) void;
 
 // Update a section of a GL Texture
-export @symbol("glTexSubImage2D")
-fn glTexSubImage2D(
+export @symbol("glTexSubImage2D") fn glTexSubImage2D(
 	tex_type:int,
 	mip_level: int,
 	offset_x: int,
@@ -130,13 +119,18 @@ fn glTexSubImage2D(
 export @symbol("glDrawArrays")
 fn glDrawArrays(geom_type: int, start_offset: int, count: int) void;
 
+export @symbol("glViewport")
+fn glViewport(offset_x: int, offset_y: int, width: int, height: int) void;
+
 // Cleanup
 
 export @symbol("glDeleteProgram")
 fn glDeleteProgram(program: int) void;
 
 export @symbol("glDeleteBuffers")
-fn glDeleteBuffers(count: int, buffer_refs: *uint) void;
+fn glDeleteBuffers(count: int, buffer_refs: *int) void;
 
 export @symbol("glDeleteTextures")
-fn glDeleteTextures(count: int, texture_refs: *uint) void;
+fn glDeleteTextures(count: int, texture_refs: *int) void;
+
+export @symbol("glGetError") fn glGetError() int;
