@@ -18,12 +18,13 @@ let CLICKS:[STRANDSIZE]f32= [0.0...];
 let idx:size=0;
 
 // STORE multiple strands of fungi
-let allstrands: [256*STRANDSIZE]f32 = [0.0...];
-let lengths: [256]size = [0...]; // num points
-let widths: [256]f32 = [0.0...];
+let allstrands: [512*STRANDSIZE]f32 = [0.0...];
+let lengths: [512]size = [0...]; // num points
+let widths: [512]f32 = [0.0...];
 let strand:size = 0;
 
 let WIDTHSELECT:bool = false;
+let fungi_width:f32 = 0.0;
 
 @symbol("stbi_load_from_memory") fn stbi_load_from_memory(
 	buffer: *u8,
@@ -125,8 +126,141 @@ export fn main() void = {
 		};
 		};
 
+		if (WIDTHSELECT) {
+		// draw offset
+		let x0 = CLICKS[idx-2]:f32;
+		let y0 = CLICKS[idx-1]:f32;
+		let x1 = X;
+		let y1 = Y;
+
+		// compute number of steps
+		let distx = math::absf32((x1-x0)*WIDTH:f32);
+		let disty = math::absf32((y1-y0)*WIDTH:f32);
+		let dist:i32 = if(distx > disty) distx:i32 else disty:i32;
+
+		let xf = x0;
+		let yf = y0;
+		let dx = (x1-x0) / dist:f32;
+		let dy = (y1-y0) / dist:f32;
+
+		// fmt::printfln("({}, {}), ({}, {})", x0, y0, x1, y1)!;
+		// consider avoiding redraws.
+		let lastx:i32 = -1;
+		let lasty:i32 = -1;
+		for(let i=0i32; i < dist; i += 1) {
+			let x = (xf * WIDTH:f32):i32;
+			if (x > WIDTH:i32) x = WIDTH:i32;
+			if (x < 0i32) x = 0;
+			let y = HEIGHT:i32 - (yf * HEIGHT:f32):i32;
+			if (y > HEIGHT:i32) y = HEIGHT:i32;
+			if (y < 0i32) y = 0;
+			xf += dx;
+			yf += dy;
+			if (x == lastx && y == lasty) {
+				// Avoid repeat pixels
+				// todo (Alec, 2024): benchmark this to see if worth.
+				continue;
+			};
+			let dst_idx = ((y * WIDTH:i32 + x) << 2):size;
+			disp[dst_idx + 0] = 0;
+			disp[dst_idx + 1] = 255;
+			disp[dst_idx + 2] = 255;
+			disp[dst_idx + 3] = 255;
+			lastx = x;
+			lasty = y;
+		};
+
+		// draw strand width
+		// todo, use projection on vector, not width.
+
+		// COMPUTE PROJECTION of last edge
+		let vx0 = (x1-x0);
+		let vy0 = (y1-y0);
+
+		let x0 = CLICKS[idx-4]:f32;
+		let y0 = CLICKS[idx-3]:f32;
+		let x1 = CLICKS[idx-2]:f32;
+		let y1 = CLICKS[idx-1]:f32;
+
+		let vx = x1 - x0;
+		let vy = y1 - y0;
+		let norm = math::sqrtf64(
+			math::powf64(vx:f64, 2.0)
+			+ math::powf64(vy:f64, 2.0)):f32;
+		let offsetx = -vy/norm;
+		let offsety = vx/norm;
+		// let width = math::sqrtf64(
+		// 		math::powf64(X:f64-CLICKS[idx-2]:f64, 2.0)
+		// 		+ math::powf64(Y:f64-CLICKS[idx-1]:f64, 2.0)):f32;
+		fungi_width = math::absf32(vx0 * offsetx + vy0 * offsety);
+		if (fungi_width > 0.05) fungi_width=0.05;
+		for (let click = 3z; click < idx; click += 2) {
+			// draw last point
+			// compute offset line
+		for (let dir:f32=-1f32; dir < 2f32; dir += 2f32) {
+			let x0 = CLICKS[click-3]:f32;
+			let y0 = CLICKS[click-2]:f32;
+			let x1 = CLICKS[click-1]:f32;
+			let y1 = CLICKS[click-0]:f32;
+
+			let vx = x1 - x0;
+			let vy = y1 - y0;
+			let norm = math::sqrtf64(
+				math::powf64(vx:f64, 2.0)
+				+ math::powf64(vy:f64, 2.0)):f32;
+			let offsetx = -vy/norm*dir;
+			let offsety = vx/norm*dir;
+			x0 += offsetx*fungi_width;
+			x1 += offsetx*fungi_width;
+			y0 += offsety*fungi_width;
+			y1 += offsety*fungi_width;
+
+			if (click >= idx) {
+				x1 = X:f32;
+				y1 = Y:f32;
+			};
+
+			// compute number of steps
+			let distx = math::absf32((x1-x0)*WIDTH:f32);
+			let disty = math::absf32((y1-y0)*WIDTH:f32);
+			let dist:i32 = if(distx > disty) distx:i32 else disty:i32;
+
+			let xf = x0;
+			let yf = y0;
+			let dx = (x1-x0) / dist:f32;
+			let dy = (y1-y0) / dist:f32;
+
+			// fmt::printfln("({}, {}), ({}, {})", x0, y0, x1, y1)!;
+			// consider avoiding redraws.
+			let lastx:i32 = -1;
+			let lasty:i32 = -1;
+			for(let i=0i32; i < dist; i += 1) {
+				let x = (xf * WIDTH:f32):i32;
+				if (x > WIDTH:i32) x = WIDTH:i32;
+				if (x < 0i32) x = 0;
+				let y = HEIGHT:i32 - (yf * HEIGHT:f32):i32;
+				if (y > HEIGHT:i32) y = HEIGHT:i32;
+				if (y < 0i32) y = 0;
+				xf += dx;
+				yf += dy;
+				if (x == lastx && y == lasty) {
+					// Avoid repeat pixels
+					// todo (Alec, 2024): benchmark this to see if worth.
+					continue;
+				};
+				let dst_idx = ((y * WIDTH:i32 + x) << 2):size;
+				disp[dst_idx + 0] = 255;
+				disp[dst_idx + 1] = 0;
+				disp[dst_idx + 2] = 0;
+				disp[dst_idx + 3] = 255;
+				lastx = x;
+				lasty = y;
+			};
+		};
+		};
+		} else {
 		// draw active strand
-		for (let click = 3z; click < (idx+2); click += 2) {
+		for (let click = 3z; click < (idx + 2); click += 2) {
 			// draw last point
 			let x0 = CLICKS[click-3]:f32;
 			let y0 = CLICKS[click-2]:f32;
@@ -173,6 +307,7 @@ export fn main() void = {
 				lastx = x;
 				lasty = y;
 			};
+		};
 		};
 
 		// draw previous strands
@@ -260,21 +395,31 @@ fn mouse_callback(win:*opaque, x:f64, y:f64) void = {
 fn click_callback(win:*opaque, button:int, act:int, mods:int) void = {
 	if(act == vacui::RELEASE) {
 		// handle repeat click (ignore or save)
-		if (idx > 2 &&
-		math::absf32(X-CLICKS[idx-2]) < 0.01 &&
-		math::absf32(Y-CLICKS[idx-1]) < 0.01) {
+		if(WIDTHSELECT) {
 			if(idx < 4) {
 				return; // not enough points to add strand
 			};
-			if (strand >= 256) {
+			if (strand >= 512) {
 				return; // too many strands added
+			};
+			if (math::absf32(X-CLICKS[idx-2]) < 0.001 &&
+				math::absf32(Y-CLICKS[idx-1]) < 0.001) {
+				return; // ignore duplicate click
 			};
 			allstrands[strand*STRANDSIZE..strand*STRANDSIZE+idx]
 				= CLICKS[..idx];
 			lengths[strand] = idx;
+			widths[strand] = fungi_width;
 			strand += 1;
 			idx = 0;
+			WIDTHSELECT=false;
 			fmt::printfln("DOUBLE-CLICK Strands {}", strand)!;
+			return;
+		};
+		if (idx > 2 &&
+		math::absf32(X-CLICKS[idx-2]) < 0.01 &&
+		math::absf32(Y-CLICKS[idx-1]) < 0.01) {
+			WIDTHSELECT = true;
 			return;
 		} else { // add mew click to current strand
 			fmt::printfln("CLICK Selected {},{}", X, Y)!;
@@ -282,10 +427,6 @@ fn click_callback(win:*opaque, button:int, act:int, mods:int) void = {
 			CLICKS[idx + 1] = Y;
 			idx += 2;
 		};
-
-		// for(let i=0z;i < idx; i+=2){
-		// 	fmt::printfln("Clicked {},{}", CLICKS[i], CLICKS[1+1])!;
-		// };
 	};
 };
 
@@ -294,12 +435,22 @@ fn key_callback(win:*opaque, key:int, scan:int, act:int, mods:int) void = {
 	if (key==vacui::KEY_BACKSPACE &&
 			(act == vacui::PRESS || act == vacui::REPEAT) &&
 			idx >= 2) {
+		if(WIDTHSELECT) {
+			// get out of widthselect
+			WIDTHSELECT = false;
+			return;
+		};
 		idx -= 2;
 		fmt::printfln("BACKSPACE, IDX {}", idx)!;
 		return;
 	};
 	if (key==vacui::KEY_ESCAPE &&
 			(act == vacui::PRESS || act == vacui::REPEAT)) {
+		if(WIDTHSELECT) {
+			// get out of widthselect.
+			WIDTHSELECT = false;
+			return;
+		};
 		idx = 0;
 		fmt::printfln("ESCAPE, IDX {}", idx)!;
 		return;
@@ -316,17 +467,7 @@ fn key_callback(win:*opaque, key:int, scan:int, act:int, mods:int) void = {
 
 	// complete strand from enter
 	if (key==vacui::KEY_ENTER && act == vacui::PRESS) {
-		if(idx < 4) {
-			return; // not enough points to add strand
-		};
-		if (strand >= 256) {
-			return; // too many strands added
-		};
-		allstrands[strand*STRANDSIZE..strand*STRANDSIZE+idx]
-			= CLICKS[..idx];
-		lengths[strand] = idx;
-		strand += 1;
-		idx = 0;
-		fmt::printfln("ENTER complete Strands {}", strand)!;
+		fmt::printfln("ENTER")!;
+		WIDTHSELECT=true;
 	};
 };
