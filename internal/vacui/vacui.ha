@@ -18,8 +18,6 @@ export type ui = struct {
 	resize: bool,
 	window_width: int,
 	window_height: int,
-	prev_width: int,
-	prev_height: int,
 	gl_program: int,
 	gl_vertex_buffer: int,
 	gl_texture: int,
@@ -56,7 +54,7 @@ export fn init(
 	width: int,
 	height: int,
 	max_size: int
-) ( void | nodisplay ) = {
+) ( *ui | nodisplay ) = {
 	// 1. Create Window
 	if(glfwInit() == 0) {
 		return nodisplay;
@@ -142,11 +140,14 @@ export fn init(
 	UI.draw_height = draw_height;
 	UI.max = max_size;
 	UI.resize = false;
+	UI.window_width = width;
+	UI.window_height = height;
 	UI.gl_program = gl_prog;
 	UI.gl_vertex_buffer = gl_buf;
 	UI.gl_texture = gl_texture;
 	UI.gles_window = window;
 	assert(glfwGetError(null)==0);
+	return &UI;
 };
 
 // Draw pixel buffer on the screen
