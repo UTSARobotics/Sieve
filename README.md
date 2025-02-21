@@ -1,6 +1,12 @@
 # SMART: Soil Microscopy Augmented Reporting Tool
 SMART is the smart way to log data and generate soil microscopy reports.
 
+## install
+
+```
+sudo apt install git build-essential lld clang llvm nasm libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev libgles-mesa-dev
+```
+
 ## Features
 - Load images and display from a sample
 - Label fungi
@@ -28,20 +34,20 @@ SMART is the smart way to log data and generate soil microscopy reports.
 
 ## Technical TODO
 - [x] makefile for project (build dep. static libraries, link hare program)
-- [ ] hare tocktick, cross-platform tocktick program counter
-- [ ] hare image opening
-- [ ] vacui opengl (for macos/desktop linux/wsl2)
-- [ ] vacui opengles
+- [x] hare tocktick, cross-platform tocktick program counter
+- [x] hare image opening
+- [x] vacui opengl (for macos/desktop linux/wsl2)
+- [x] vacui opengles
 - [ ] Test different image compression
 - [ ] hare glfw/vulkan (link to c graphics framebuffer lib)
 - [ ] hex array header gen for the fragment/vertex spirv (write hare program for this)
-- [ ] display image
+- [x] display image
 - [ ] draw squares on framebuffer
 - [ ] draw text on framebuffer
-- [ ] draw lines on framebuffer image
-- [ ] draw lines when keypress, parallel line expand on keypress
-- [ ] navigation
-- [ ] save line data files as wxf
+- [x] draw lines on framebuffer image
+- [x] draw lines when keypress, parallel line expand on keypress
+- [~] navigation
+- [x] save line data files as wxf
 - [ ] AVX on x86, neon on arm
 - [ ] hare warren (ravenring) ipc and launch (spawn?) system, C, Python, R bindings
 - [ ] breed metacompiler for windows C gen from hare.
