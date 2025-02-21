@@ -1,6 +1,6 @@
-CC=clang-15
-CXX=clang++-15
-LD=ld.lld-15
+CC=clang
+CXX=clang++
+LD=ld.lld
 LIBCFLAGS=-fstack-protector-all -D_FORTIFY_SOURCE=2 -ffunction-sections -fdata-sections -fvisibility-inlines-hidden -O2 -msse4.2 -mavx
 CMAKEOPTS=-DCMAKE_BUILD_TYPE=MinSizeRel -DBUILD_SHARED_LIBS=OFF -DBUILD_TESTING=OFF \
 	-DCMAKE_C_COMPILER=$(CC) -DCMAKE_CXX_COMPILER=$(CXX) -DCMAKE_LINKER=lld \
