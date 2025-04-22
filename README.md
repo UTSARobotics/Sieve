@@ -5,6 +5,7 @@ SMART is the smart way to log data and generate soil microscopy reports.
 
 ```
 sudo apt install git build-essential lld clang llvm nasm libxcursor-dev libxinerama-dev libxrandr-dev libxi-dev libgles-mesa-dev
+make
 ```
 
 ## Features

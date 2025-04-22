@@ -10,6 +10,8 @@ use path;
 use strings;
 use fs::{flag};
 use errors;
+use sort;
+use sort::cmp;
 
 let WIDTH:size=0;
 let HEIGHT:size=0;
@@ -27,88 +29,13 @@ let lengths: [127]size = [0...]; // num points
 let widths: [127]f32 = [0.0...];
 let strand:size = 0;
 
-
 let SKIP = false;
 let WIDTHSELECT:bool = false;
 let NEXT_IMAGE:bool = false;
 let fungi_width:f32 = 0.0;
-
-@symbol("stbi_load_from_memory") fn stbi_load_from_memory(
-	buffer: *u8,
-	length: int,
-	x: *int,
-	y: *int,
-	channels: *int,
-	desired_channels: int,
-) nullable *u8;
-
-@symbol("stbi_image_free") fn stbi_image_free(pixels: nullable *u8) void;
-
-fn load_image(filepath: str) (nullable *u8, int, int, int) = {
-	// 1. Open and read the file into memory
-	const file = match (os::open(filepath)) {
-	case let file: io::file =>
-		yield file;
-	case let err: fs::error =>
-		fmt::fatalf("Error opening {}: {}", os::args[1], fs::strerror(err));
-	};
-	defer io::close(file)!;
-
-	// Read entire file into memory
-	const filebuf = match (io::drain(file)) {
-	case let buf: []u8 =>
-		yield buf;
-	case let err: io::error =>
-		fmt::fatalf("Error reading file: {}", io::strerror(err));
-	};
-	defer free(filebuf);
-	fmt::printfln("buffer len: {}", len(filebuf))!;
-
-	// 2. Use stb_image to decode
-	let width: int = 0;
-	let height: int = 0;
-	let channels: int = 0;
-	const desired_channels = 4; // We want RGBA output
-
-	let pixels = stbi_load_from_memory(
-		&filebuf[0],
-		len(filebuf): int,
-		&width,
-		&height,
-		&channels,
-		desired_channels,
-	);
-
-	if (pixels == null) {
-		fmt::printfln("Failed to load image {}", filepath)!;
-	};
-	fmt::printfln("Loaded!")!;
-	return (pixels, width, height, channels);
-};
-
-// everything is packaged as function
-fn write_function(buffer:[]u8, i:*size, name:str, length:size) void = {
-	buffer[*i] = 'f'; *i+=1;
-	assert(length < 0b10000000z); // TODO (2025) varint. 127 is max. (precompute i and add at end)
-	buffer[*i] = length:u8; *i+= 1;
-	assert(len(name) < 0b10000000z); // TODO (2025) varint. 127 is max. (precompute i and add at end)
-	buffer[*i] = len(name):u8; *i+=1;
-	buffer[*i..*i+len(name)] = strings::toutf8(name); *i+=len(name);
-};
-
-// encode a fraction as an i16
-fn encode_fraci16(x:f32) i16 = {
-	if (x > 1.0) x = 1.0;
-	if (x < 0.0) x = 0.0;
-	return math::roundf64(x:f64 * 32767:f64):i16;
-};
-
-// decode a fraction from an i16
-fn decode_fraci16(x:i16) f32 = {
-	if (x < 0) x = 0;
-	return (x:f64 / 32767:f64):f32;
-};
-
+let N_IMAGES=0;
+let image_idx=0;
+let DIRECTION = 1;
 
 fn save_fungi(image_path: *path::buffer) void = {
 	// skip write if no fungi labeled.
@@ -139,38 +66,37 @@ fn save_fungi(image_path: *path::buffer) void = {
 	if(SKIP){
 		write_function(buffer, &i, "skip", 0);
 	} else {
-		// write list of strands
-		write_function(buffer, &i, "List", strand);
+	// write list of strands
+	write_function(buffer, &i, "List", strand);
+	// write each strand
+	for (let s=0z; s < strand; s += 1) {
+		let length = lengths[s];
+		// write hypha
+		write_function(buffer, &i, "hypha", 1+length);
+		// write width as i16
+		let width:f32 = widths[s];
+		let widthi = encode_fraci16(width);
+		buffer[i] = 'j';
+		buffer [i+1] = widthi:u8;
+		buffer [i+2] = (widthi >> 8):u8;
+		i += 3;
 
-		// write each strand
-		for (let s=0z; s < strand; s += 1) {
-			let length = lengths[s];
-			// write hypha
-			write_function(buffer, &i, "hypha", 1+length);
-			// write width as i16
-			let width:f32 = widths[s];
-			let widthi = encode_fraci16(width);
+		// go through each point on the strand and save as i16
+		let st = allstrands[s*STRANDSIZE..s*STRANDSIZE+length];
+		for (let p = 0z; p < length; p+=2) {
+			//x
+			let x = encode_fraci16(st[p]);
 			buffer[i] = 'j';
-			buffer [i+1] = widthi:u8;
-			buffer [i+2] = (widthi >> 8):u8;
-			i += 3;
-
-			// go through each point on the strand and save as i16
-			let st = allstrands[s*STRANDSIZE..s*STRANDSIZE+length];
-			for (let p = 0z; p < length; p+=2) {
-				//x
-				let x = encode_fraci16(st[p]);
-				buffer[i] = 'j';
-				buffer[i+1] = x:u8;
-				buffer[i+2] = (x >> 8):u8;
-				//y
-				let y = encode_fraci16(st[p+1]);
-				buffer[i+3] = 'j';
-				buffer[i+4] = y:u8;
-				buffer[i+5] = (y >> 8):u8;
-				i += 6;
-			};
+			buffer[i+1] = x:u8;
+			buffer[i+2] = (x >> 8):u8;
+			//y
+			let y = encode_fraci16(st[p+1]);
+			buffer[i+3] = 'j';
+			buffer[i+4] = y:u8;
+			buffer[i+5] = (y >> 8):u8;
+			i += 6;
 		};
+	};
 	};
 
 	//write
@@ -278,21 +204,68 @@ export fn main() void = {
 	// initialize GUI window
 	let pixels_disp:[]u8 = alloc([0u8...], 4096 * 4096 * 4)!;
 	let alloctime = hac::count();
-	let UI = vacui::init("labeler", 640, 480, 4096)!;
-	glfwSetCursorPosCallback(UI.gles_window:*opaque, &mouse_callback);
-	glfwSetMouseButtonCallback(UI.gles_window:*opaque, &click_callback);
-	glfwSetKeyCallback(UI.gles_window:*opaque, &key_callback);
+	let UI = vacui::init("labeler", 640, 480, 1440)!;
+	vacui::glfwSetCursorPosCallback(UI.gles_window:*opaque, &mouse_callback);
+	vacui::glfwSetMouseButtonCallback(UI.gles_window:*opaque, &click_callback);
+	vacui::glfwSetKeyCallback(UI.gles_window:*opaque, &key_callback);
 
 	// Process each directory entry...
 	let buf = path::init(os::args[1])!;
 	let iter = os::iter(path::string(&buf))!;
-	for (const d => fs::next(iter)!) {
-	if (d.name == "." || d.name == "..") {
-		continue;
+
+	let FILENAMES:[1024]str = [""...];
+	// = alloc(????, 1024)!; // up to 512 images + .wxf
+
+	let file_index = 0z;
+	for (const current_image => fs::next(iter)!) {
+		path::push(&buf, current_image.name)!;
+		defer path::pop(&buf);
+
+		let ext = match(path::pop_ext(&buf)) {
+		case void =>
+			continue;
+		case let e:str =>
+			yield e;
+		};
+
+		if (ext == "txt" || ext == "csv" || ext == "wxf") {
+			continue;
+		};
+
+		FILENAMES[file_index] = strings::dup(current_image.name)!;
+		file_index += 1;
+
+		// fmt::printfln("idx: {}", file_index)!;
+		if(file_index > 1024) {
+			fmt::printfln("Warning: Skipping some images because there are over 1024 in the directory!")!;
+			break;
+		};
+		// fmt::printfln("EXTENSION: {}", ext)!;
+		// fmt::printfln("file name: {}", current_image.name)!;
+		// fmt::printfln("file name: {}", FILENAMES[file_index-1])!;
+	};
+	defer fs::finish(iter); // doing now would only add delay?
+
+	N_IMAGES = file_index:int;
+
+	sort::sort(FILENAMES[..N_IMAGES], size(str), &cmp::strs);
+
+	// Print filenames:
+	// for (let i = 0z; i < file_index; i+=1) {
+	// 	fmt::printfln("file name: {}", FILENAMES[i])!;
+	// };
+
+	// loop through file names
+	image_idx=0;
+	for (true) {
+	if(image_idx < 0) image_idx = 0;
+	if(image_idx >= N_IMAGES) {
+		fmt::printfln("Folder Complete! Good Job 😁")!;
+		break;
 	};
 
-	fmt::printfln("file name: {}", d.name)!;
-	path::push(&buf, d.name)!;
+	fmt::printfln("file name: {}", FILENAMES[image_idx])!;
+	path::push(&buf, FILENAMES[image_idx])!;
 	defer path::pop(&buf);
 
 	// check the extension, skip common non-images.
@@ -333,326 +306,152 @@ export fn main() void = {
 		let src = pixels: *[*]u8;
 		let disp = pixels_disp: *[*]u8;
 
-		// TODO only copy from original image after resize
+		// TODO (Alec, 2024) only copy from original image after resize
 		//   = maintain second buffer.
 		// Scale using two loops for x,y coordinates
 		for (let y = 0z; y < HEIGHT; y += 1) {
-		for (let x = 0z; x < WIDTH; x += 1) {
-			// Calculate source and destination pixel positions
-			let src_x = (x:f32 * scale_x):size;
-			let src_y = (y:f32 * scale_y):size;
+			for (let x = 0z; x < WIDTH; x += 1) {
+				// Calculate source and destination pixel
+				let src_x = (x:f32 * scale_x):size;
+				let src_y = (y:f32 * scale_y):size;
 
-			// Calculate array indices
-			let dst_idx = ((HEIGHT-y) * WIDTH + x) * 4;
-			let src_idx = (src_y * width:size + src_x) * 4;
+				// Calculate array indices
+				let dst_idx = ((HEIGHT-y) * WIDTH + x) * 4;
+				let src_idx = (src_y * width:size + src_x) * 4;
 
-			// Copy RGBA values
-			disp[dst_idx + 0] = src[src_idx + 0];
-			disp[dst_idx + 1] = src[src_idx + 1];
-			disp[dst_idx + 2] = src[src_idx + 2];
-			disp[dst_idx + 3] = src[src_idx + 3];
-		};
-		}; //DRAW IMAGE
-
-
-		if(SKIP) {
-			let x0 = 0:f32;
-			let y0 = 0:f32;
-			let x1 = 1:f32;
-			let y1 = 1:f32;
-
-			// compute number of steps
-			let distx = math::absf32((x1-x0)*WIDTH:f32);
-			let disty = math::absf32((y1-y0)*WIDTH:f32);
-			let dist:i32 = if(distx > disty) distx:i32 else disty:i32;
-
-			let xf = x0;
-			let yf = y0;
-			let dx = (x1-x0) / dist:f32;
-			let dy = (y1-y0) / dist:f32;
-
-			// fmt::printfln("({}, {}), ({}, {})", x0, y0, x1, y1)!;
-			// consider avoiding redraws.
-			let lastx:i32 = -1;
-			let lasty:i32 = -1;
-			for(let i=0i32; i < dist; i += 1) {
-				let x = (xf * WIDTH:f32):i32;
-				if (x > WIDTH:i32) x = WIDTH:i32;
-				if (x < 0i32) x = 0;
-				let y = HEIGHT:i32 - (yf * HEIGHT:f32):i32;
-				if (y > HEIGHT:i32) y = HEIGHT:i32;
-				if (y < 0i32) y = 0;
-				let dst_idx = ((y * WIDTH:i32 + x) << 2):size;
-				disp[dst_idx + 0] = 255;
-				disp[dst_idx + 1] = 0;
-				disp[dst_idx + 2] = 0;
-				disp[dst_idx + 3] = 255;
-				xf += dx;
-				yf += dy;
+				// Copy RGBA values
+				disp[dst_idx + 0] = src[src_idx + 0];
+				disp[dst_idx + 1] = src[src_idx + 1];
+				disp[dst_idx + 2] = src[src_idx + 2];
+				disp[dst_idx + 3] = src[src_idx + 3];
 			};
+		}; // DRAW IMAGE
 
-			let x0 = 1:f32;
-			let y0 = 0:f32;
-			let x1 = 0:f32;
-			let y1 = 1:f32;
-
-			// compute number of steps
-			let distx = math::absf32((x1-x0)*WIDTH:f32);
-			let disty = math::absf32((y1-y0)*WIDTH:f32);
-			let dist:i32 = if(distx > disty) distx:i32 else disty:i32;
-
-			let xf = x0;
-			let yf = y0;
-			let dx = (x1-x0) / dist:f32;
-			let dy = (y1-y0) / dist:f32;
-
-			// fmt::printfln("({}, {}), ({}, {})", x0, y0, x1, y1)!;
-			// consider avoiding redraws.
-			let lastx:i32 = -1;
-			let lasty:i32 = -1;
-			for(let i=0i32; i < dist; i += 1) {
-				let x = (xf * WIDTH:f32):i32;
-				if (x > WIDTH:i32) x = WIDTH:i32;
-				if (x < 0i32) x = 0;
-				let y = HEIGHT:i32 - (yf * HEIGHT:f32):i32;
-				if (y > HEIGHT:i32) y = HEIGHT:i32;
-				if (y < 0i32) y = 0;
-				let dst_idx = ((y * WIDTH:i32 + x) << 2):size;
-				disp[dst_idx + 0] = 255;
-				disp[dst_idx + 1] = 0;
-				disp[dst_idx + 2] = 0;
-				disp[dst_idx + 3] = 255;
-				xf += dx;
-				yf += dy;
-			};
-		} else {
-		if (WIDTHSELECT) {
-		// draw offset
+		if(SKIP) { // draw an 'X' in red across the screen
+			// (x0, y0), (x1, y1)
+			draw_line(disp, HEIGHT, WIDTH, 0.0, 0.0, 1.0, 1.0,
+				255, 0, 0);
+			draw_line(disp, HEIGHT, WIDTH, 1.0, 0.0, 0.0, 1.0,
+				255, 0, 0);
+		} else { // draw the actual image
+		if (WIDTHSELECT) { // draw offset lines
 		let x0 = CLICKS[idx-2]:f32;
 		let y0 = CLICKS[idx-1]:f32;
 		let x1 = X;
 		let y1 = Y;
 
-		// compute number of steps
-		let distx = math::absf32((x1-x0)*WIDTH:f32);
-		let disty = math::absf32((y1-y0)*WIDTH:f32);
-		let dist:i32 = if(distx > disty) distx:i32 else disty:i32;
-
-		let xf = x0;
-		let yf = y0;
-		let dx = (x1-x0) / dist:f32;
-		let dy = (y1-y0) / dist:f32;
-
-		for(let i=0i32; i < dist; i += 1) {
-			let x = (xf * WIDTH:f32):i32;
-			if (x > WIDTH:i32) x = WIDTH:i32;
-			if (x < 0i32) x = 0;
-			let y = HEIGHT:i32 - (yf * HEIGHT:f32):i32;
-			if (y > HEIGHT:i32) y = HEIGHT:i32;
-			if (y < 0i32) y = 0;
-			let dst_idx = ((y * WIDTH:i32 + x) << 2):size;
-			disp[dst_idx + 0] = 0;
-			disp[dst_idx + 1] = 255;
-			disp[dst_idx + 2] = 255;
-			disp[dst_idx + 3] = 255;
-			xf += dx;
-			yf += dy;
-		};
+		draw_line(disp, HEIGHT, WIDTH, x0, y0, x1, y1,
+			0, 255, 255);
 
 		// draw strand width
-		// COMPUTE PROJECTION of last line
-		let vx0 = (x1-x0);
-		let vy0 = (y1-y0);
+		// COMPUTE PROJECTION of last (width) line
+		let vxw0 = (x1-x0);
+		let vyw0 = (y1-y0);
 
 		let x0 = CLICKS[idx-4]:f32;
 		let y0 = CLICKS[idx-3]:f32;
 		let x1 = CLICKS[idx-2]:f32;
 		let y1 = CLICKS[idx-1]:f32;
 
-		let vx = x1 - x0;
-		let vy = y1 - y0;
-		let norm = math::sqrtf64(
-			math::powf64(vx:f64, 2.0)
-			+ math::powf64(vy:f64, 2.0)):f32;
-		let offsetx = -vy/norm;
-		let offsety = vx/norm;
-		fungi_width = math::absf32(vx0 * offsetx + vy0 * offsety);
+		// Get vector direction of the last hypha line
+		let vx0 = x1 - x0;
+		let vy0 = y1 - y0;
+		let norm0 = math::sqrtf64(
+			math::powf64(vx0:f64, 2.0)
+			+ math::powf64(vy0:f64, 2.0)):f32;
+		let vxn0 = vx0/norm0;
+		let vyn0 = vy0/norm0;
+		let offsetx0 = -vy0/norm0; // 90 deg rotation
+		let offsety0 = vx0/norm0;
+		// projected length:
+		fungi_width = math::absf32(vxw0 * offsetx0 + vyw0 * offsety0);
 		if (fungi_width > 0.05) fungi_width=0.05;
+
+		// Draw offset lines for each segment
 		for (let click = 3z; click < idx; click += 2) {
-		// draw offset points
-		for (let dir:f32=-1f32; dir < 2f32; dir += 2f32) {
-			let x0 = CLICKS[click-3]:f32;
-			let y0 = CLICKS[click-2]:f32;
-			let x1 = CLICKS[click-1]:f32;
-			let y1 = CLICKS[click-0]:f32;
+			// draw offset points
+			for (let dir:f32=-1f32; dir < 2f32; dir += 2f32) {
+				let x0 = CLICKS[click-3]:f32;
+				let y0 = CLICKS[click-2]:f32;
+				let x1 = CLICKS[click-1]:f32;
+				let y1 = CLICKS[click-0]:f32;
 
-			let vx = x1 - x0;
-			let vy = y1 - y0;
-			let norm = math::sqrtf64(
-				math::powf64(vx:f64, 2.0)
-				+ math::powf64(vy:f64, 2.0)):f32;
-			let offsetx = -vy/norm*dir;
-			let offsety = vx/norm*dir;
-			x0 += offsetx*fungi_width;
-			x1 += offsetx*fungi_width;
-			y0 += offsety*fungi_width;
-			y1 += offsety*fungi_width;
+				let vx = x1 - x0;
+				let vy = y1 - y0;
+				let norm = math::sqrtf64(
+					math::powf64(vx:f64, 2.0)
+					+ math::powf64(vy:f64, 2.0)):f32;
 
-			// hack, draw point to current mouse position.
-			if (click >= idx) {
-				x1 = X:f32;
-				y1 = Y:f32;
-			};
+				let offsetx = -vy/norm*dir; // 90 deg rotation matrix
+				let offsety = vx/norm*dir;
+				x0 += offsetx*fungi_width;
+				x1 += offsetx*fungi_width;
+				y0 += offsety*fungi_width;
+				y1 += offsety*fungi_width;
 
-			// compute number of steps
-			let distx = math::absf32((x1-x0)*WIDTH:f32);
-			let disty = math::absf32((y1-y0)*WIDTH:f32);
-			let dist:i32 = if(distx > disty) distx:i32 else disty:i32;
+				// hack, draw point to current mouse position.
+				if (click >= idx) {
+					x1 = X:f32;
+					y1 = Y:f32;
+				};
 
-			let xf = x0;
-			let yf = y0;
-			let dx = (x1-x0) / dist:f32;
-			let dy = (y1-y0) / dist:f32;
-
-			for(let i=0i32; i < dist; i += 1) {
-				let x = (xf * WIDTH:f32):i32;
-				if (x > WIDTH:i32) x = WIDTH:i32;
-				if (x < 0i32) x = 0;
-				let y = HEIGHT:i32 - (yf * HEIGHT:f32):i32;
-				if (y > HEIGHT:i32) y = HEIGHT:i32;
-				if (y < 0i32) y = 0;
-				let dst_idx = ((y * WIDTH:i32 + x) << 2):size;
-				disp[dst_idx + 0] = 255;
-				disp[dst_idx + 1] = 0;
-				disp[dst_idx + 2] = 0;
-				disp[dst_idx + 3] = 255;
-				xf += dx;
-				yf += dy;
+				draw_line(disp, HEIGHT, WIDTH, x0, y0, x1, y1,
+					255, 0, 0);
 			};
 		};
-		};
-		} else {
-		// draw active strand
-		for (let click = 3z; click < (idx + 2); click += 2) {
-			// draw last point
-			let x0 = CLICKS[click-3]:f32;
-			let y0 = CLICKS[click-2]:f32;
-			let x1 = CLICKS[click-1]:f32;
-			let y1 = CLICKS[click-0]:f32;
-			if (click >= idx) {
-				x1 = X:f32;
-				y1 = Y:f32;
+		} else { // Draw active hyphal strand segments
+			for (let click = 3z; click < (idx + 2); click += 2) {
+				// draw last point
+				let x0 = CLICKS[click-3]:f32;
+				let y0 = CLICKS[click-2]:f32;
+				let x1 = CLICKS[click-1]:f32;
+				let y1 = CLICKS[click-0]:f32;
+				if (click >= idx) {
+					x1 = X:f32;
+					y1 = Y:f32;
+				};
+				draw_line(disp, HEIGHT, WIDTH, x0, y0, x1, y1,
+					0, 255, 255);
 			};
-
-			// compute number of steps
-			let distx = math::absf32((x1-x0)*WIDTH:f32);
-			let disty = math::absf32((y1-y0)*WIDTH:f32);
-			let dist:i32 = if(distx > disty) distx:i32 else disty:i32;
-
-			let xf = x0;
-			let yf = y0;
-			let dx = (x1-x0) / dist:f32;
-			let dy = (y1-y0) / dist:f32;
-
-			for(let i=0i32; i < dist; i += 1) {
-				let x = (xf * WIDTH:f32):i32;
-				if (x > WIDTH:i32) x = WIDTH:i32;
-				if (x < 0i32) x = 0;
-				let y = HEIGHT:i32 - (yf * HEIGHT:f32):i32;
-				if (y > HEIGHT:i32) y = HEIGHT:i32;
-				if (y < 0i32) y = 0;
-				let dst_idx = ((y * WIDTH:i32 + x) << 2):size;
-				disp[dst_idx + 0] = 0;
-				disp[dst_idx + 1] = 255;
-				disp[dst_idx + 2] = 255;
-				disp[dst_idx + 3] = 255;
-				xf += dx;
-				yf += dy;
-			};
-		};
 		}; // DRAW ACTIVE STRAND
 
-		// draw previous strands
+		// Draw previous strands
 		for (let s = 0z; s < (strand); s += 1) {
 			let idx = lengths[s];
 			let CLICKS = allstrands[s*STRANDSIZE..s*STRANDSIZE+idx];
-		for (let click = 3z; click < idx; click += 2) {
-			// draw last point
-			let x0 = CLICKS[click-3]:f32;
-			let y0 = CLICKS[click-2]:f32;
-			let x1 = CLICKS[click-1]:f32;
-			let y1 = CLICKS[click-0]:f32;
-
-			// compute number of steps
-			let distx = math::absf32((x1-x0)*WIDTH:f32);
-			let disty = math::absf32((y1-y0)*WIDTH:f32);
-			let dist:i32 = if(distx > disty) distx:i32 else disty:i32;
-
-			let xf = x0;
-			let yf = y0;
-			let dx = (x1-x0) / dist:f32;
-			let dy = (y1-y0) / dist:f32;
-
-			// fmt::printfln("({}, {}), ({}, {})", x0, y0, x1, y1)!;
-			// consider avoiding redraws.
-			let lastx:i32 = -1;
-			let lasty:i32 = -1;
-			for(let i=0i32; i < dist; i += 1) {
-				let x = (xf * WIDTH:f32):i32;
-				if (x > WIDTH:i32) x = WIDTH:i32;
-				if (x < 0i32) x = 0;
-				let y = HEIGHT:i32 - (yf * HEIGHT:f32):i32;
-				if (y > HEIGHT:i32) y = HEIGHT:i32;
-				if (y < 0i32) y = 0;
-				let dst_idx = ((y * WIDTH:i32 + x) << 2):size;
-				disp[dst_idx + 0] = 255;
-				disp[dst_idx + 1] = 121;
-				disp[dst_idx + 2] = 0;
-				disp[dst_idx + 3] = 255;
-				xf += dx;
-				yf += dy;
-			};
-		}; // draw line
+			for (let click = 3z; click < idx; click += 2) {
+				// draw last point
+				let x0 = CLICKS[click-3]:f32;
+				let y0 = CLICKS[click-2]:f32;
+				let x1 = CLICKS[click-1]:f32;
+				let y1 = CLICKS[click-0]:f32;
+				draw_line(disp, HEIGHT, WIDTH, x0, y0, x1, y1,
+					255, 121, 0);
+			}; // draw line
 		}; // DRAW PREVIOUS STRANDS
-		}; // SKIP
+		}; // NOT SKIP
 
 		vacui::draw(pixels_disp[..(WIDTH * HEIGHT * 4)])!;
 		time::sleep(15 * time::MILLISECOND);
 		vacui::checkevents(); // run callbacks
 
-
 		if (!vacui::ok()) {
 			return;
 		};
 		if (NEXT_IMAGE) {
+			image_idx += DIRECTION;
 			NEXT_IMAGE = false;
 			save_fungi(&buf);
 			stbi_image_free(pixels);
 			break;
 		};
-		}; /// RENDER LOOP
+	}; /// RENDER LOOP
 
 	};
 
 	fmt::printfln("labeler")!;
 	fmt::printfln("... took {} ns", hac::ns(start))!;
 };
-
-export @symbol("glfwSetCursorPosCallback") fn glfwSetCursorPosCallback(
-	window: *opaque,
-	callback: *fn(win:*opaque, x:f64, y:f64) void
-) void;
-
-export @symbol("glfwSetMouseButtonCallback") fn glfwSetMouseButtonCallback(
-	window: *opaque,
-	callback: *fn(win:*opaque, button:int, act:int, mods:int) void
-) void;
-
-export @symbol("glfwSetKeyCallback") fn glfwSetKeyCallback(
-	window: *opaque,
-	callback: *fn(win:*opaque, key:int, scan:int, act:int, mods:int) void
-) void;
-
 
 fn mouse_callback(win:*opaque, x:f64, y:f64) void = {
 	// fmt::printfln("x: {}, y {}", x/WIDTH:f64, y/HEIGHT:f64)!;
@@ -743,8 +542,15 @@ fn key_callback(win:*opaque, key:int, scan:int, act:int, mods:int) void = {
 	};
 
 	// complete strand from enter
-	if (key==vacui::KEY_RIGHT && act == vacui::PRESS) {
+	if ((key==vacui::KEY_RIGHT || key==vacui::KEY_SPACE) && act == vacui::PRESS) {
 		fmt::printfln("NEXT")!;
+		DIRECTION = 1;
+		NEXT_IMAGE = true;
+	};
+
+	if (key==vacui::KEY_LEFT && act == vacui::PRESS) {
+		fmt::printfln("PREV")!;
+		DIRECTION = -1;
 		NEXT_IMAGE = true;
 	};
 
